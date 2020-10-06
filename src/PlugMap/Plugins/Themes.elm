@@ -307,7 +307,7 @@ type alias WMSConfig =
 
 
 type alias EsriExportConfig =
-    { endpoints : Endpoints
+    { endpoints : List Endpoint
     , extent : Extent   
     , layerDefs : Maybe String 
     }
@@ -1123,7 +1123,7 @@ esriExportLayerDecoder =
 esriExportConfigDecoder : Decoder EsriExportConfig
 esriExportConfigDecoder =
     D.succeed EsriExportConfig
-        |> required "endpoints" endpointsDecoder
+        |> required "endpoints"(D.list endpointDecoder)
         |> required "extent" extentDecoder  
         |> optional "layerDefs" (D.maybe D.string) Nothing      
 
@@ -1356,7 +1356,7 @@ encodeWMTSLayer config =
 encodeEsriExportLayer : EsriExportConfig -> E.Value
 encodeEsriExportLayer config =
     E.object
-        [ ( "endpoints", encodeEndpoints config.endpoints )
+        [ ( "endpoints", E.list encodeEndpoint config.endpoints )
         , ( "extent", encodeExtent config.extent )      
         , ( "layerDefs", EEx.maybe E.string config.layerDefs)  
         ]

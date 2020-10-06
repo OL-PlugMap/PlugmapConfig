@@ -240,6 +240,8 @@ configEditorView cfg =
     column
         [ centerX
         , spacing 25
+        , width fill
+        , padding 5
         ]
         [ text "Config Editor"
         , spacer
@@ -279,10 +281,13 @@ mapOptionsView opts =
     in
     column
         [ spacing 15
+        , width fill
+        , padding 5
         ]
         [ text "Map Options"
         , row 
             [ spacing 15
+            , width fill
             ]
             [ el [ width <| px 125 ] <| text "Center (x,y)"
             , Input.text
@@ -405,10 +410,14 @@ mapThemesView : Themes.Model -> Element Themes.Model
 mapThemesView themes =
     column
         [ spacing 15
+        , width fill
+        , Border.width 1
+        , padding 5
         ]
         [ text "Themes"
         , column
             [ spacing 15
+            , width fill
             ]
             <| List.intersperse spacer
             <| List.indexedMap (mapThemesCategoryView themes) themes.layerCategories 
@@ -433,9 +442,11 @@ mapThemesCategoryView themes index category =
     in
     column
         [ spacing 5 
+        , width fill
         ]
         [ row
             [ spacing 10 
+            , width fill
             ]
             [ makeLabel "Key"
             , Input.text
@@ -634,8 +645,6 @@ mapThemesCategoryView themes index category =
                         False
                 }
             ]
---TODO
-
         , row
             [ spacing 10 
             , width fill
@@ -661,6 +670,7 @@ renderGroup themes category index group =
         [ spacing 5
         , Border.width 1
         , width fill
+        , padding 5
         ]
         [ text <| Themes.groupKeyToString group
         , case grp of
@@ -681,9 +691,12 @@ groupRenderer themes category index group =
             Themes.updateGroup themes grp
     in
     column
-        []
+        [ width fill
+        , spacing 3
+        ]
         [ row 
-            [ spacing 10 
+            [ spacing 10
+            , width fill 
             ]
             [ makeLabel "Key" 
             , Input.text
@@ -707,6 +720,7 @@ groupRenderer themes category index group =
             ]
         , row 
             [ spacing 10 
+            , width fill 
             ]
             [ makeLabel "Name" 
             , Input.text
@@ -767,6 +781,7 @@ groupRenderer themes category index group =
             [ makeLabel "Layers"
             , column
                 [ width fill
+                , spacing 5
                 ]
                 <| List.map 
                     ( renderLayer themes category index
@@ -784,6 +799,7 @@ renderLayer themes category index layer =
         [ spacing 5
         , Border.width 1
         , width fill
+        , padding 5
         ]
         [ text <| Themes.layerKeyToString layer
         , case lyr of
@@ -819,7 +835,9 @@ layerRenderer themes category index layer =
                     False
     in
     column
-        []
+        [ width fill
+        , spacing 3
+        ]
         [ row 
             [ spacing 10 
             ]
@@ -924,27 +942,427 @@ layerRenderer themes category index layer =
 
 
 layerConfigRenderer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.Layer -> Element Themes.Model
-layerConfigRenderer themes category index { config } =
+layerConfigRenderer themes category index layer =
     column
-        []
+        [ width fill
+        , spacing 10
+        , Border.width 1
+        , padding 5
+        ]
         [ text 
-            <| case config of
+            <| case layer.config of
                 Themes.XYZLayer _ -> "XYZ"
                 Themes.WMTSLayer _ -> "WMTS"
                 Themes.WMSLayer _ -> "WMS"
                 Themes.EsriExportLayer _ -> "ESRI MapService"
                 Themes.MapboxVectorTile _ -> "MVT"
                 Themes.UnknownLayer -> "Unknown type or error parsing"
-        , case config of
+        , case layer.config of
             Themes.XYZLayer _ -> text <| "XYZ"
             Themes.WMTSLayer _ -> text <| "WMTS"
             Themes.WMSLayer _ -> text <| "WMS"
-            Themes.EsriExportLayer _ -> text <| "ESRI MapService"
-            Themes.MapboxVectorTile _ -> text <| "MVT"
+            Themes.EsriExportLayer esri -> renderESRIMapService themes layer esri
+            Themes.MapboxVectorTile mvt -> renderMVTConfig themes layer mvt
             Themes.UnknownLayer -> text <| "Unknown type or error parsing"
         ]
 
+renderESRIMapService : Themes.Model -> Themes.Layer -> Themes.EsriExportConfig -> Element Themes.Model
+renderESRIMapService themes layer config =
+    let
+        
+        updootLay cfg =
+            { layer
+            | config = Themes.EsriExportLayer cfg
+            }
+        
+        updootThm lay =
+            Themes.updateLayer themes lay
 
+    in
+    column 
+        [ width fill
+        , spacing 5
+        , padding 5
+        ]
+        [ row 
+            [ spacing 10 
+            ]
+            [ makeLabel "Layer Definitions" 
+            , Input.text
+                []
+                { onChange = 
+                    (\text ->
+                        let
+                            newCat = 
+                                { config 
+                                | layerDefs = 
+                                    if String.length text > 0 then
+                                        Just text
+                                    else
+                                        Nothing
+                                }
+                        in
+                        newCat |> updootLay |> updootThm
+                    )
+                , placeholder = Nothing
+                , label = Input.labelHidden <|  "Layer Definitions"
+                , text = 
+                    config.layerDefs |> Maybe.withDefault ""
+                }
+            ]
+        , row 
+            [ spacing 10 
+            ]
+            [ makeLabel "Extent" 
+            , row
+                [ width fill
+                ]
+                <| List.indexedMap
+                    (\idx -> \itm ->
+                        let 
+                            before = List.take idx config.extent
+                            after = List.drop (idx + 1) config.extent
+                            upd v =
+                                { config 
+                                | extent = before ++ [ v ] ++ after
+                                }
+                        in
+                        Input.text
+                            []
+                            { onChange = 
+                                (\text ->
+                                    text |> String.toFloat |> Maybe.map upd |> Maybe.withDefault config |> updootLay |> updootThm
+                                )
+                            , placeholder = Nothing
+                            , label = Input.labelHidden <|  "Extent"
+                            , text = 
+                                itm |> String.fromFloat
+                            }
+                    )
+                    config.extent
+            ]
+        , row 
+            [ spacing 10 
+            ]
+            [ makeLabel "Endpoints" 
+            , column 
+                [ width fill
+                , spacing 5
+                ]
+                <| List.indexedMap (renderEsriMapServiceEndpoint themes layer config) config.endpoints
+            ]
+        ]
+
+renderEsriMapServiceEndpoint : Themes.Model -> Themes.Layer -> Themes.EsriExportConfig -> Int -> Themes.Endpoint -> Element Themes.Model
+renderEsriMapServiceEndpoint themes layer config index endpoint =
+    let
+        epB4 = List.take index config.endpoints
+        epA = List.drop (index + 1) config.endpoints
+
+        updootEP ep =
+            { config
+            | endpoints = epB4 ++ [ ep ] ++ epA 
+            }
+        
+        updootLay cfg =
+            { layer
+            | config = Themes.EsriExportLayer cfg
+            }
+        
+        updootThm lay =
+            Themes.updateLayer themes lay
+
+        updoot x =
+            x |> updootEP |> updootLay |> updootThm
+    in
+    column
+        [ width fill
+        , spacing 3
+        ]
+        [ row
+            [ spacing 10 
+            , width fill
+            ]
+            [ makeLabel "Token Key"
+            , Input.text
+                []
+                { onChange = 
+                    (\text ->
+                        { endpoint 
+                        | tokenKey = 
+                            if String.length text > 0 then
+                                Just text
+                            else
+                                Nothing
+                        } 
+                        |> updoot
+                    )
+                , placeholder = Nothing
+                , label = Input.labelHidden <|  "Token Key"
+                , text = 
+                    endpoint.tokenKey |> Maybe.withDefault ""
+                }
+            ]
+        , row
+            [ spacing 10 
+            , width fill
+            ]
+            [ makeLabel "URL"
+            , Input.text
+                []
+                { onChange = 
+                    (\text ->
+                        { endpoint | url = text } |> updoot
+                    )
+                , placeholder = Nothing
+                , label = Input.labelHidden <|  "URL"
+                , text = 
+                    endpoint.url
+                }
+            ]
+        , row
+            [ spacing 10 
+            , width fill
+            ]
+            [ makeLabel "Z-Index"
+            , row
+                [ width fill
+                , spacing 5
+                ]
+                [ endpoint.zIndex |> String.fromInt |> makeLabel
+                , Input.slider
+                    [ width fill
+                    , Bg.color <| rgb 0.9 0.9 0.9
+                    ]
+                    { onChange = 
+                        (\val ->
+                            { endpoint 
+                            | zIndex = floor val
+                            }
+                            |> updoot
+                        )
+                    , label = Input.labelHidden <|  "Multiphasic"
+                    , min = 0
+                    , max = 1000
+                    , step = Just 1
+                    , value = endpoint.zIndex |> toFloat
+                    , thumb = Input.defaultThumb
+                    }
+                ]
+            ]
+        , row
+            [ spacing 10 
+            , width fill
+            ]
+            [ makeLabel "Layers To Show"
+            , Input.text
+                []
+                { onChange = 
+                    (\text ->
+                        { endpoint 
+                        | layersToShow = 
+                            if String.length text > 0 then
+                                Just text
+                            else
+                                Nothing
+                        } |> updootEP |> updootLay |> updootThm
+                    )
+                , placeholder = Nothing
+                , label = Input.labelHidden <|  "Layers To Show"
+                , text = 
+                    endpoint.layersToShow |> Maybe.withDefault ""
+                }
+            ]
+        , row
+            [ spacing 10 
+            , width fill
+            ]
+            [ makeLabel "Layer Definitions"
+            , Input.text
+                []
+                { onChange = 
+                    (\text ->
+                        { endpoint 
+                        | layerDefs = 
+                            if String.length text > 0 then
+                                Just text
+                            else
+                                Nothing
+                        } |> updootEP |> updootLay |> updootThm
+                    )
+                , placeholder = Nothing
+                , label = Input.labelHidden <|  "Layers To Show"
+                , text = 
+                    endpoint.layerDefs |> Maybe.withDefault ""
+                }
+            ]
+        , row
+            [ spacing 10 
+            , width fill
+            ]
+            [ makeLabel "Bounding Box"
+            , Input.text
+                []
+                { onChange = 
+                    (\text ->
+                        { endpoint 
+                        | bbox = 
+                            if String.length text > 0 then
+                                Just text
+                            else
+                                Nothing
+                        } |> updootEP |> updootLay |> updootThm
+                    )
+                , placeholder = Nothing
+                , label = Input.labelHidden <|  "Layers To Show"
+                , text = 
+                    endpoint.bbox |> Maybe.withDefault ""
+                }
+            ]
+        ]
+
+
+renderMVTConfig : Themes.Model -> Themes.Layer -> Themes.MVTConfig -> Element Themes.Model
+renderMVTConfig themes layer config =
+    column 
+        [ width fill
+        , spacing 5
+        ]
+        <| List.indexedMap (renderMVTEndpoint themes layer config) config.endpoints
+
+
+renderMVTEndpoint : Themes.Model -> Themes.Layer -> Themes.MVTConfig -> Int -> Themes.MVTEndpoint -> Element Themes.Model
+renderMVTEndpoint themes layer config index endpoint =
+    let
+        epB4 = List.take index config.endpoints
+        epA = List.drop (index + 1) config.endpoints
+
+        updootEP ep =
+            { config
+            | endpoints = epB4 ++ [ ep ] ++ epA 
+            }
+        
+        updootLay cfg =
+            { layer
+            | config = Themes.MapboxVectorTile cfg
+            }
+        
+        updootThm lay =
+            Themes.updateLayer themes lay
+
+        updoot x =
+            x |> updootEP |> updootLay |> updootThm
+    in
+    column
+        [ width fill
+        , spacing 3
+        ]
+        [ row
+            [ spacing 10 
+            , width fill
+            ]
+            [ makeLabel "Token Key"
+            , Input.text
+                []
+                { onChange = 
+                    (\text ->
+                        { endpoint 
+                        | tokenKey = 
+                            if String.length text > 0 then
+                                Just text
+                            else
+                                Nothing
+                        } 
+                        |> updoot
+                    )
+                , placeholder = Nothing
+                , label = Input.labelHidden <|  "Token Key"
+                , text = 
+                    endpoint.tokenKey |> Maybe.withDefault ""
+                }
+            ]
+        , row
+            [ spacing 10 
+            , width fill
+            ]
+            [ makeLabel "URL"
+            , Input.text
+                []
+                { onChange = 
+                    (\text ->
+                        { endpoint | url = text } |> updoot
+                    )
+                , placeholder = Nothing
+                , label = Input.labelHidden <|  "URL"
+                , text = 
+                    endpoint.url
+                }
+            ]
+        , row
+            [ spacing 10 
+            , width fill
+            ]
+            [ makeLabel "Z-Index"
+            , row
+                [ width fill
+                , spacing 5
+                ]
+                [ endpoint.zIndex |> Maybe.map String.fromInt |> Maybe.withDefault "Unset" |> makeLabel
+                , Input.slider
+                    [ width fill
+                    , Bg.color <| rgb 0.9 0.9 0.9
+                    ]
+                    { onChange = 
+                        (\val ->
+                            { endpoint 
+                            | zIndex = Just <| floor val
+                            }
+                            |> updoot
+                        )
+                    , label = Input.labelHidden <|  "Multiphasic"
+                    , min = 0
+                    , max = 1000
+                    , step = Just 1
+                    , value = endpoint.zIndex |> Maybe.withDefault 0 |> toFloat
+                    , thumb = Input.defaultThumb
+                    }
+                ]
+            ]
+        , row
+            [ spacing 10 
+            , width fill
+            ]
+            [ makeLabel "Style"
+            , Input.text
+                []
+                { onChange = 
+                    (\text ->
+                        { endpoint | url = text } |> updootEP |> updootLay |> updootThm
+                    )
+                , placeholder = Nothing
+                , label = Input.labelHidden <|  "URL"
+                , text = 
+                    endpoint.url
+                }
+            ]
+        , row
+            [ spacing 10 
+            , width fill
+            ]
+            [ makeLabel "Filter"
+            , Input.text
+                []
+                { onChange = 
+                    (\text ->
+                        { endpoint | url = text } |> updootEP |> updootLay |> updootThm
+                    )
+                , placeholder = Nothing
+                , label = Input.labelHidden <|  "URL"
+                , text = 
+                    endpoint.url
+                }
+            ]
+        ]
 
 
 loadView : LoadMode -> LoadStep -> Element Msg

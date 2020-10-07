@@ -897,13 +897,14 @@ linkImageDecoder =
         ]
 
 
+
+
 themesDecoder : Decoder Model
 themesDecoder =
     D.succeed Model
         |> required "layers" layerRepoDecoder
         |> required "layerGroups" layerGroupRepoDecoder
         |> required "layerCategories" layerCategoriesDecoder
---        |> required "referenceLayers" (D.list layerKeyDecoder)
 
 
 layerCategoriesDecoder : Decoder (List LayerCategory)
@@ -1060,7 +1061,7 @@ endpointDecoder : Decoder Endpoint
 endpointDecoder =
     D.succeed Endpoint
         |> required "url" D.string
-        |> required "z-index" D.int
+        |> custom ( D.oneOf [D.field "z-index" D.int, D.field "zIndex" D.int] )
         |> optional "tokenKey" (D.maybe D.string) Nothing
         |> optional "layersToShow" (D.maybe D.string) Nothing
         |> optional "layerDefs" (D.maybe D.string) Nothing
@@ -1239,6 +1240,128 @@ encodeThemes model =
     model.layerCategories
         |> E.list (encodeCategory model)
 
+
+encodeThemesDB : Model -> E.Value
+encodeThemesDB model =
+    E.object
+        [ ( "layerCategories", E.list encodeLayerCategoryDB model.layerCategories )
+        , ( "layerGroups", E.list encodeLayerGroupDB <| Dict.values model.layerGroupRepo )
+        , ( "layers", E.list encodeLayerDB <| Dict.values model.layerRepo )
+        ]
+
+
+encodeLayerGroupDB : LayerGroup -> E.Value
+encodeLayerGroupDB group =
+    E.object
+        [ ( "key", encodeGroupKey group.key )
+        , ( "name", EEx.maybe E.string group.name )
+        , ( "openness", encodeOpenness group.openness )
+        , ( "layers", E.list encodeLayerKey group.layers )
+        ]
+
+encodeLayerDB : Layer -> E.Value
+encodeLayerDB layer =
+    E.object
+        [ ( "key", encodeLayerKey layer.key )
+        , ( "name", E.string layer.name )
+        , ( "opacity", EEx.maybe E.float layer.opacity )
+        , ( encodeLayerConfigDB layer.config )
+        , ( "legend", EEx.maybe encodeLegend layer.legend )
+        , ( "identify", EEx.maybe encodeIdentify layer.identify )
+        ]
+
+encodeLayerConfigDB : LayerConfig -> (String, E.Value)
+encodeLayerConfigDB config_ =
+    case config_ of
+        XYZLayer config ->
+            ( "xyz", encodeXYZLayer config )
+
+        WMTSLayer config ->
+            ( "wmts", encodeWMTSLayer config )
+
+        WMSLayer config ->
+            ( "wms", encodeWMSLayer config )
+
+        EsriExportLayer config ->
+            ( "esriExport", encodeEsriExportLayer config )
+
+        MapboxVectorTile config ->
+            ( "mvt", encodeMapboxConfig config )
+        
+        UnknownLayer ->
+            ( "unknown", E.object [] )
+
+encodeLegend : Legend -> E.Value
+encodeLegend legend =
+    E.object [ ( "todo", E.string "todo" ) ]
+
+encodeLayerCategoryDB : LayerCategory -> E.Value
+encodeLayerCategoryDB category =
+    E.object
+        [ ("key", encodeCategoryKey category.key)
+        , ("name", E.string category.name)
+        , ("hidden", E.bool category.hidden)
+        , ("infoIcon", encodeLinkImage category.infoIcon )
+        , ("openness", encodeOpenness category.openness )
+        , ("activeIcon", encodeLinkImage category.activeIcon )
+        , ("layerGroups", E.list encodeGroupKey category.layerGroups )
+        , ("multiphasic", E.bool category.multiphasic)
+        , ("transparency", E.float category.transparency)
+        , ("selectiveness", encodeSelectionType category.selection)
+        , ("defaultSelection", E.list encodeLayerKey 
+                <| case category.selection of
+                    Monoselection (Just v) ->
+                        [v]
+                    EnforcedMonoselection v ->
+                        [v]
+                    Polyselection v ->
+                        v
+                    EnforcedPolyselection v x ->
+                        v :: x
+                    _ -> []
+            )
+        , ( "usesRasterLegend", E.bool category.usesRasterLegend )
+        , ( "mustHaveSelection", E.bool False )
+        ]
+
+encodeLinkImage : LinkImage -> E.Value
+encodeLinkImage img =
+    case img of 
+        Img v ->
+            E.object [ ( "iconImg", E.string v ) ]
+        Icon v ->
+            E.object [ ( "iconClass", E.string v ) ]
+        NoImage ->
+            E.null
+
+encodeSelectionType : Selection -> E.Value
+encodeSelectionType selection =
+    E.string 
+    <| case selection of 
+        Monoselection _ ->
+            "monoselective"
+        EnforcedMonoselection _ ->
+            "monoselective"
+        _ ->
+            "polyselective"
+
+encodeOpenness : Openness -> E.Value
+encodeOpenness openness =
+    E.string 
+    <| case openness of
+        Open -> "open"
+        _ -> "closed"
+
+encodeGroupKey : GroupKey -> E.Value
+encodeGroupKey key =
+    key |> groupKeyToString |> E.string
+
+encodeSelectiveness : Selectiveness -> E.Value
+encodeSelectiveness selectiveness =
+    E.string 
+    <| case selectiveness of 
+        Polyselective -> "polyselective"
+        _ -> "monoselective"
 
 encodeCategoryKey : CategoryKey -> E.Value
 encodeCategoryKey (CategoryKey key) =

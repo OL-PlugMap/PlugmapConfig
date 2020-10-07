@@ -1,4 +1,4 @@
-module Main exposing (..)
+port module Main exposing (..)
 
 import Browser exposing (Document)
 import Browser.Dom as Dom
@@ -19,7 +19,7 @@ import Html.Keyed
 import Html.Attributes
 
 
-import Json.Decode as D exposing (Decoder, Value, dict, errorToString, int, string)
+import Json.Decode as D exposing (Decoder, Value, dict, errorToString, int, string, Error)
 import Json.Decode.Pipeline exposing (hardcoded, optional, required)
 import Json.Encode as E exposing (Value)
 import Json.Encode.Extra as EEx
@@ -34,6 +34,9 @@ import Task
 import PlugMap.Core.Options as MapOptions
 import PlugMap.Plugins.Themes as Themes
 
+import Dict
+
+port logError : (List String) -> Cmd msg
 
 ---- MODEL ----
 
@@ -41,6 +44,7 @@ import PlugMap.Plugins.Themes as Themes
 type alias Model =
     { state : State
     , key : Nav.Key
+    , editorMode : EditingMode
     }
 
 type State 
@@ -48,6 +52,7 @@ type State
     | MainMenu
     | LoadConfig LoadMode LoadStep
     | Editing Config
+    | Export Config
     | Error
 
 
@@ -59,7 +64,7 @@ type LoadStep
     = New String
     | Parse String
     | ErrorParsing String
-    | Ok Config
+    | LoadOk Config
     | BeepBoop
 
 
@@ -72,7 +77,7 @@ type alias Config =
 
 init : D.Value -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init params url key =
-    ( { state = MainMenu, key = key }
+    ( { state = MainMenu, key = key, editorMode = Hierarchical }
     , Process.sleep 500 
             |> Task.perform ( always <| Init )
     )
@@ -92,9 +97,15 @@ type Msg
 
     | StartParsing String
     | ParseIt String
-    | StartEditing Config
+    | StartEditing EditingMode Config
     | UpdateConfig Config
 
+    | ExportClick Config
+
+type EditingMode
+    = Hierarchical
+    | Flat
+    | SequenceLayers
 
 
 type MenuAction
@@ -140,36 +151,59 @@ update msg model =
             )
         ParseIt text ->
             let
-                mop : Maybe MapOptions.Options
                 mop =
-                    D.decodeString (MapOptions.optionsFromConfigDecoder) text |> Result.toMaybe
+                    D.decodeString (MapOptions.optionsFromConfigDecoder) text
 
-                mt : Maybe Themes.Model
                 mt =
-                    D.decodeString (Themes.themesDecoder) text |> Result.toMaybe
+                    D.decodeString (Themes.themesDecoder) text
        
             in
             case ( mop, mt ) of
-                (Just options, Just t ) ->
+                (Ok options, Ok thms ) ->
                     let
                         no = 
                             Config
                                 options
-                                t
-                        ns = LoadConfig FromText <| Ok no
+                                thms
+                        ns = LoadConfig FromText <| LoadOk no
                     in
                     ( { model
                         | state = ns
                         }
                     , Cmd.none
                     )
-                (_,_) ->
-                    ( model, Cmd.none )
+                (Ok options, Err err) ->
+                    ( model
+                    , logError 
+                        [ "Error Decoding Themes"
+                        , D.errorToString err
+                        ] 
+                    )
+                ( Err err, Ok themes) ->
+                    ( model
+                    , logError 
+                        [ "Error Decoding Options"
+                        , D.errorToString err
+                        ] 
+                    )
+                ( Err err, Err err2 ) ->
+                    ( model
+                    , logError 
+                        [ "Error Decoding Options"
+                        , D.errorToString err
+                        , "Error Decoding Themes"
+                        , D.errorToString err
+                        ] 
+                    )
+
         Load mode step ->
             ( { model | state = LoadConfig mode step }, Cmd.none )
 
-        StartEditing cfg ->
-            ( { model | state = Editing cfg }
+        StartEditing mode cfg ->
+            ( { model 
+                | state = Editing cfg 
+                , editorMode = mode
+                }
             , Cmd.none
             )
 
@@ -177,6 +211,14 @@ update msg model =
             ( { model | state = Editing nCfg }
             , Cmd.none
             )
+
+        ExportClick cfg ->
+            (   { model 
+                | state = Export cfg 
+                }
+            , Cmd.none
+            )
+
 
         _ ->
             ( model, Cmd.none )
@@ -200,7 +242,7 @@ menuOptions =
 
 view : Model -> Document Msg
 view model =
-    { title = "Problem loading"
+    { title = "Plugmap Config Editing Tool"
     , body =
         [ layout 
             [ height fill
@@ -225,7 +267,9 @@ switchView model =
         LoadConfig mode step ->
             loadView mode step
         Editing cfg ->
-            configEditorView cfg
+            configEditorView model.editorMode cfg
+        Export cfg ->
+            exportView cfg
         Error ->
             el [] <|
                 paragraph []
@@ -233,30 +277,112 @@ switchView model =
                     , text "We've encountered a problem loading the Workflow."
                     ]
 
+encodeConfigDB : Config -> E.Value
+encodeConfigDB config =
+    E.object
+        [ ( "layerCategories", E.list Themes.encodeLayerCategoryDB config.themes.layerCategories )
+        , ( "layerGroups", E.list Themes.encodeLayerGroupDB <| Dict.values config.themes.layerGroupRepo )
+        , ( "layers", E.list Themes.encodeLayerDB <| Dict.values config.themes.layerRepo )
+        , ( "options", MapOptions.encodeOptions config.options )
+        ]
 
 
-configEditorView : Config -> Element Msg
-configEditorView cfg =
+exportView : Config -> Element Msg
+exportView config =
+    let
+        txtVal = 
+            E.encode 4 
+            <| encodeConfigDB config
+    in
+    column
+        [ width fill
+        ]
+        [ row
+            [ width fill
+            ]
+            [ text "Config Export"
+            , el [ alignRight ] <| appButton "< Back To Editor" ( StartEditing Hierarchical config ) True
+            , el [ alignRight ] <| appButton "Start Over" ( Init ) True
+            ]
+        , Input.multiline
+            [ width fill
+            ]
+            { onChange = (\t -> NoOp)
+            , text = txtVal
+            , placeholder = Nothing
+            , label = Input.labelAbove [] <| text "Database Config"
+            , spellcheck = False
+            }
+        , text "Map direct config is todo"
+        ]
+
+
+configEditorView : EditingMode -> Config -> Element Msg
+configEditorView mode cfg =
     column
         [ centerX
         , spacing 25
         , width fill
+        , height fill
+        , padding 5
+        ]
+        [ editHeader mode cfg
+        , spacer
+        , column
+            [ centerX
+            , spacing 25
+            , width fill
+            , height fill
+            , padding 5
+            , scrollbarY
+            ]
+            [ mapOptionsView cfg.options
+                |> El.map 
+                    (\v -> 
+                        UpdateConfig { cfg | options = v } 
+                    )
+            , spacer
+            , case mode of
+                Hierarchical ->
+                    hierarchicalMapThemesView cfg.themes
+                    |> El.map 
+                        (\v -> 
+                            UpdateConfig { cfg | themes = v } 
+                        )
+                Flat ->
+                    text "TODO"
+                SequenceLayers -> 
+                    text "TODO"
+            ]
+        ]
+
+
+--TODO: These buttons will probably change if/when we add other modes
+editHeader : EditingMode -> Config ->  Element Msg
+editHeader mode config =
+    let 
+        othermode =
+            case mode of
+                Hierarchical -> Flat
+                Flat -> SequenceLayers
+                SequenceLayers -> Hierarchical
+    in
+    row
+        [ width fill
         , padding 5
         ]
         [ text "Config Editor"
-        , spacer
-        , mapOptionsView cfg.options
-            |> El.map 
-                (\v -> 
-                    UpdateConfig { cfg | options = v } 
-                )
-        , spacer
-        , mapThemesView cfg.themes
-            |> El.map 
-                (\v -> 
-                    UpdateConfig { cfg | themes = v } 
-                )
+        , el [ centerX ] <| appButton "Start Over" Init True
+        , el [ centerX ] <| appButton ("Switch to " ++ (editingModeToString othermode)) ( StartEditing othermode config ) True
+        , el [ alignRight ] <| appButton "Export >" ( ExportClick config ) True
         ]
+
+editingModeToString : EditingMode -> String
+editingModeToString mode =
+    case mode of
+        Hierarchical -> "Hierarchical"
+        Flat -> "Flat"
+        SequenceLayers -> "Sequencer"
 
 spacer : Element msg
 spacer = 
@@ -406,8 +532,8 @@ mapOptionsView opts =
             ]
         ]
 
-mapThemesView : Themes.Model -> Element Themes.Model
-mapThemesView themes =
+hierarchicalMapThemesView : Themes.Model -> Element Themes.Model
+hierarchicalMapThemesView themes =
     column
         [ spacing 15
         , width fill
@@ -1043,12 +1169,14 @@ renderESRIMapService themes layer config =
             ]
         , row 
             [ spacing 10 
+            , width fill
             ]
             [ makeLabel "Endpoints" 
             , column 
                 [ width fill
                 , spacing 5
                 ]
+                <| List.intersperse spacer
                 <| List.indexedMap (renderEsriMapServiceEndpoint themes layer config) config.endpoints
             ]
         ]
@@ -1408,16 +1536,46 @@ loadFromTextView step =
                 [ text "Error Parsamooting"
                 , text err
                 ]
-        Ok cfg ->
+        LoadOk cfg ->
             column
-                [ spacing 10
+                [ spacing 20
                 , centerX
+                , padding 10
                 ]
-                [ text "We did it"
-                , appButton
-                    "Next"
-                    (StartEditing cfg)
-                    (True)
+                <| List.intersperse spacer
+                [ text "Configuration parsed successfully."
+                , column 
+                    [ spacing 2
+                    ]
+                    [ text "Config stats"
+                    , spacer
+                    , text <| (String.fromInt <| List.length <| Dict.values <| cfg.themes.layerRepo) ++ " layers" 
+                    , text <| (String.fromInt <| List.length <| Dict.values <| cfg.themes.layerGroupRepo) ++ " groups" 
+                    , text <| (String.fromInt <| List.length <| cfg.themes.layerCategories) ++ " categories" 
+                    ]
+                , column 
+                    [ spacing 2
+                    ]
+                    [ appButton
+                        "Hierarchical Editor"
+                        (StartEditing Hierarchical cfg)
+                        (True)
+                    , appButton
+                        "Flat Editor"
+                        (StartEditing Flat cfg)
+                        (True)
+                    , appButton
+                        "Layer Sequencer"
+                        (StartEditing SequenceLayers cfg)
+                        (True)
+                    ]
+                , column 
+                    []
+                    [ appButton
+                        "Start Over"
+                        (Init)
+                        (True)
+                    ]
                 ]
             
         _ ->

@@ -98,7 +98,9 @@ type Msg
     | StartParsing String
     | ParseIt String
     | StartEditing EditingMode Config
+    
     | UpdateConfig Config
+    | UpdateThemes Themes.Model
 
     | ExportClick Config
 
@@ -211,6 +213,17 @@ update msg model =
             ( { model | state = Editing nCfg }
             , Cmd.none
             )
+
+        UpdateThemes nThms ->
+            case model.state of
+                Editing cfg ->
+                    let
+                        nCfg = { cfg | themes = nThms }
+                    in
+                    ( { model | state = Editing nCfg }
+                    , Cmd.none
+                    )
+                _ -> ( model, Cmd.none )
 
         ExportClick cfg ->
             (   { model 
@@ -345,10 +358,6 @@ configEditorView mode cfg =
             , case mode of
                 Hierarchical ->
                     hierarchicalMapThemesView cfg.themes
-                    |> El.map 
-                        (\v -> 
-                            UpdateConfig { cfg | themes = v } 
-                        )
                 Flat ->
                     text "TODO"
                 SequenceLayers -> 
@@ -532,7 +541,7 @@ mapOptionsView opts =
             ]
         ]
 
-hierarchicalMapThemesView : Themes.Model -> Element Themes.Model
+hierarchicalMapThemesView : Themes.Model -> Element Msg
 hierarchicalMapThemesView themes =
     column
         [ spacing 15
@@ -556,7 +565,7 @@ makeLabel val =
         ]
         <| text val
 
-mapThemesCategoryView : Themes.Model -> Int -> Themes.LayerCategory -> Element Themes.Model
+mapThemesCategoryView : Themes.Model -> Int -> Themes.LayerCategory -> Element Msg
 mapThemesCategoryView themes index category =
     let
         before = List.take index themes.layerCategories
@@ -565,6 +574,7 @@ mapThemesCategoryView themes index category =
             { themes
             | layerCategories = before ++ [ newCat ] ++ after
             }
+            |> UpdateThemes
     in
     column
         [ spacing 5 
@@ -787,7 +797,7 @@ mapThemesCategoryView themes index category =
             
         ]
 
-renderGroup : Themes.Model -> Themes.LayerCategory -> Int -> Themes.GroupKey -> Element Themes.Model
+renderGroup : Themes.Model -> Themes.LayerCategory -> Int -> Themes.GroupKey -> Element Msg
 renderGroup themes category index group =
     let
         grp = Themes.getGroupByKey themes.layerGroupRepo group
@@ -810,11 +820,11 @@ renderGroup themes category index group =
 
 
 
-groupRenderer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.LayerGroup -> Element Themes.Model
+groupRenderer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.LayerGroup -> Element Msg
 groupRenderer themes category index group =
     let 
         updoot grp =
-            Themes.updateGroup themes grp
+            Themes.updateGroup themes grp |> UpdateThemes
     in
     column
         [ width fill
@@ -904,20 +914,52 @@ groupRenderer themes category index group =
             [ spacing 10 
             , width fill
             ]
-            [ makeLabel "Layers"
+            [ column
+                []
+                [ makeLabel "Layers"
+                , appButton 
+                    "Add Layer" 
+                    (
+                        let
+                            newKey = Themes.stringToLayerKey "lyr_change_me"
+
+                            newLayer = 
+                                { key = newKey
+                                , name = ""
+                                , opacity = Nothing
+                                , config = Themes.UnknownLayer
+                                , legend = Nothing
+                                , identify = Nothing
+                                }
+                            
+                            newGroup =
+                                { group 
+                                | layers = group.layers ++ [ newKey ]
+                                }
+
+                            newThm = 
+                                Themes.updateGroup
+                                    ( Themes.insertLayer newLayer themes)
+                                    newGroup
+                        in
+                        UpdateThemes newThm
+
+                    )
+                    True
+                ]
             , column
                 [ width fill
                 , spacing 5
                 ]
                 <| List.map 
-                    ( renderLayer themes category index
+                    ( renderLayer themes category index group
                     )
                     group.layers
             ]
         ]
 
-renderLayer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.LayerKey -> Element Themes.Model
-renderLayer themes category index layer =
+renderLayer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.LayerGroup -> Themes.LayerKey -> Element Msg
+renderLayer themes category index group layer  =
     let
         lyr = Themes.getLayerByKey themes.layerRepo layer
     in
@@ -930,17 +972,20 @@ renderLayer themes category index layer =
         [ text <| Themes.layerKeyToString layer
         , case lyr of
             Just g ->
-                layerRenderer themes category index g
+                layerRenderer themes category index group g
             Nothing ->
                 text "No Layer Found!"
         ]
 
-layerRenderer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.Layer -> Element Themes.Model
-layerRenderer themes category index layer =
+layerRenderer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.LayerGroup -> Themes.Layer -> Element Msg
+layerRenderer themes category index group layer =
     let 
         updoot lyr =
-            Themes.updateLayer themes lyr
+            updootLay lyr
+            |> UpdateThemes
 
+        updootLay lyr =
+            Themes.updateLayer themes lyr
         
         before = List.take index themes.layerCategories
         after = List.drop (index + 1) themes.layerCategories
@@ -949,6 +994,7 @@ layerRenderer themes category index layer =
             { themes
             | layerCategories = before ++ [ newCat ] ++ after
             }
+            |> UpdateThemes
 
         
         isSelected =
@@ -959,6 +1005,8 @@ layerRenderer themes category index layer =
                     List.member layer.key lis
                 _ ->
                     False
+        updootGroop newGrp t =
+            Themes.updateGroup t newGrp
     in
     column
         [ width fill
@@ -978,8 +1026,32 @@ layerRenderer themes category index layer =
                                 | key = 
                                     Themes.stringToLayerKey text
                                 }
+
+                            newGroup =
+                                { group
+                                | layers = 
+                                    group.layers
+                                    |> List.map
+                                        (\l ->
+                                            if l == layer.key then
+                                                Themes.stringToLayerKey text
+                                            else
+                                                l
+                                        )
+                                }
+
+                            newThm thm =
+                                if isSelected then
+                                    Themes.toggleLayerSelection layer.key category thm
+                                    |> Themes.toggleLayerSelection (Themes.stringToLayerKey text) category
+                                else
+                                    thm
+
                         in
-                        updoot newCat
+                        updootLay newCat
+                        |> updootGroop newGroup
+                        |> newThm
+                        |> UpdateThemes
                     )
                 , placeholder = Nothing
                 , label = Input.labelHidden <|  "Key"
@@ -1018,6 +1090,7 @@ layerRenderer themes category index layer =
                 { onChange = 
                     (\val ->
                         Themes.toggleLayerSelection layer.key category themes
+                        |> UpdateThemes
                     )
                 , icon = Input.defaultCheckbox
                 , label = Input.labelHidden <|  "Hidden"
@@ -1066,9 +1139,20 @@ layerRenderer themes category index layer =
             ]
         ]
 
+emptyExtent = [0,0,0,0]
 
-layerConfigRenderer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.Layer -> Element Themes.Model
+layerConfigRenderer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.Layer -> Element Msg
 layerConfigRenderer themes category index layer =
+    let
+        textualValue =
+            case layer.config of
+                Themes.XYZLayer _ -> "XYZ"
+                Themes.WMTSLayer _ -> "WMTS"
+                Themes.WMSLayer _ -> "WMS"
+                Themes.EsriExportLayer _ -> "ESRI MapService"
+                Themes.MapboxVectorTile _ -> "MVT"
+                Themes.UnknownLayer -> "Unknown"
+    in
     column
         [ width fill
         , spacing 10
@@ -1076,13 +1160,62 @@ layerConfigRenderer themes category index layer =
         , padding 5
         ]
         [ text 
-            <| case layer.config of
-                Themes.XYZLayer _ -> "XYZ"
-                Themes.WMTSLayer _ -> "WMTS"
-                Themes.WMSLayer _ -> "WMS"
-                Themes.EsriExportLayer _ -> "ESRI MapService"
-                Themes.MapboxVectorTile _ -> "MVT"
-                Themes.UnknownLayer -> "Unknown type or error parsing"
+            <| textualValue
+        , Input.radio
+            [ padding 10
+            , spacing 20
+            ]
+            { onChange = 
+                (\newOpt ->
+                    let
+                        newConf =
+                            case newOpt of
+                                "XYZ" -> 
+                                    Themes.XYZLayer
+                                        { endpoints  = []
+                                        , maxZoom = 22
+                                        , minZoom = 3
+                                        }
+                                "WMTS" -> 
+                                    Themes.WMTSLayer
+                                        { endpoints = []
+                                        , extent = emptyExtent
+                                        }
+                                "WMS" ->
+                                    Themes.WMSLayer
+                                        { endpoints = []
+                                        , extent = emptyExtent
+                                        }
+                                "ESRI MapService" -> 
+                                    Themes.EsriExportLayer
+                                    { endpoints = []
+                                    , extent = emptyExtent 
+                                    , layerDefs = Nothing
+                                    }
+                                "MVT" -> 
+                                    Themes.MapboxVectorTile
+                                        { endpoints = []
+                                        }
+                                _ ->
+                                    Themes.UnknownLayer
+                    in
+                        { layer 
+                        | config = newConf
+                        }
+                        |> Themes.updateLayer themes
+                        |> UpdateThemes
+                )
+            , selected = Just textualValue
+            , label = Input.labelHidden "Type"
+            , options =
+                [ Input.option "XYZ" (text "XYZ")
+                , Input.option "WMTS" (text "WMTS")
+                , Input.option "WMS" (text "WMS")
+                , Input.option "ESRI MapService" (text "ESRI MapService")
+                , Input.option "MVT" (text "MVT")
+                , Input.option "Unknown" (text "Unknown")
+                ]
+            }
         , case layer.config of
             Themes.XYZLayer _ -> text <| "XYZ"
             Themes.WMTSLayer _ -> text <| "WMTS"
@@ -1092,7 +1225,7 @@ layerConfigRenderer themes category index layer =
             Themes.UnknownLayer -> text <| "Unknown type or error parsing"
         ]
 
-renderESRIMapService : Themes.Model -> Themes.Layer -> Themes.EsriExportConfig -> Element Themes.Model
+renderESRIMapService : Themes.Model -> Themes.Layer -> Themes.EsriExportConfig -> Element Msg
 renderESRIMapService themes layer config =
     let
         
@@ -1103,6 +1236,7 @@ renderESRIMapService themes layer config =
         
         updootThm lay =
             Themes.updateLayer themes lay
+            |> UpdateThemes
 
     in
     column 
@@ -1171,7 +1305,27 @@ renderESRIMapService themes layer config =
             [ spacing 10 
             , width fill
             ]
-            [ makeLabel "Endpoints" 
+            [ column
+                []
+                [ makeLabel "Endpoints" 
+                , appButton 
+                    "Add Endpoint" 
+                    (
+                        { config
+                        | endpoints = 
+                            config.endpoints ++ 
+                            [   { url = ""
+                                , zIndex = 0
+                                , tokenKey = Nothing
+                                , layersToShow = Nothing
+                                , layerDefs = Nothing
+                                , bbox = Nothing
+                                }
+                            ] 
+                        } |> updootLay |> updootThm
+                    )
+                    True
+                ]
             , column 
                 [ width fill
                 , spacing 5
@@ -1181,7 +1335,7 @@ renderESRIMapService themes layer config =
             ]
         ]
 
-renderEsriMapServiceEndpoint : Themes.Model -> Themes.Layer -> Themes.EsriExportConfig -> Int -> Themes.Endpoint -> Element Themes.Model
+renderEsriMapServiceEndpoint : Themes.Model -> Themes.Layer -> Themes.EsriExportConfig -> Int -> Themes.Endpoint -> Element Msg
 renderEsriMapServiceEndpoint themes layer config index endpoint =
     let
         epB4 = List.take index config.endpoints
@@ -1199,6 +1353,7 @@ renderEsriMapServiceEndpoint themes layer config index endpoint =
         
         updootThm lay =
             Themes.updateLayer themes lay
+            |> UpdateThemes
 
         updoot x =
             x |> updootEP |> updootLay |> updootThm
@@ -1350,16 +1505,58 @@ renderEsriMapServiceEndpoint themes layer config index endpoint =
         ]
 
 
-renderMVTConfig : Themes.Model -> Themes.Layer -> Themes.MVTConfig -> Element Themes.Model
+renderMVTConfig : Themes.Model -> Themes.Layer -> Themes.MVTConfig -> Element Msg
 renderMVTConfig themes layer config =
-    column 
-        [ width fill
-        , spacing 5
-        ]
-        <| List.indexedMap (renderMVTEndpoint themes layer config) config.endpoints
+    let
+        updootLay cfg =
+            { layer
+            | config = Themes.MapboxVectorTile cfg
+            }
+        
+        updootThm lay =
+            Themes.updateLayer themes lay
+            |> UpdateThemes
+    in
+     row 
+            [ spacing 10 
+            , width fill
+            ]
+            [ column
+                []
+                [ makeLabel "Endpoints" 
+                , appButton 
+                    "Add Endpoint" 
+                    (
+                        { config
+                        | endpoints = 
+                            config.endpoints ++ 
+                            [   { url = ""
+                                , zIndex = Nothing
+                                , tokenKey = Nothing
+                                , style = 
+                                    Themes.StaticStyle
+                                    { strokeColor = Nothing
+                                    , strokeWidth = Nothing
+                                    , fillColor = Nothing
+                                    }
+                                , filter = Nothing
+                                }
+                            ] 
+                        } |> updootLay |> updootThm
+                    )
+                    True
+                ]
+            
+            , column 
+                [ width fill
+                , spacing 5
+                ]
+                <| List.intersperse spacer
+                <| List.indexedMap (renderMVTEndpoint themes layer config) config.endpoints
+            ]
 
 
-renderMVTEndpoint : Themes.Model -> Themes.Layer -> Themes.MVTConfig -> Int -> Themes.MVTEndpoint -> Element Themes.Model
+renderMVTEndpoint : Themes.Model -> Themes.Layer -> Themes.MVTConfig -> Int -> Themes.MVTEndpoint -> Element Msg
 renderMVTEndpoint themes layer config index endpoint =
     let
         epB4 = List.take index config.endpoints
@@ -1377,6 +1574,7 @@ renderMVTEndpoint themes layer config index endpoint =
         
         updootThm lay =
             Themes.updateLayer themes lay
+            |> UpdateThemes
 
         updoot x =
             x |> updootEP |> updootLay |> updootThm
@@ -1604,7 +1802,7 @@ menuView =
     <| menuOptions
 
 
-appButton : String -> Msg -> Bool -> Element Msg
+appButton : String -> msg -> Bool -> Element msg
 appButton label action enabled =
     Input.button
         [ width <| px 300

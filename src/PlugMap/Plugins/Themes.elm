@@ -288,14 +288,14 @@ decodeMVTConfig =
     |> required "endpoints" (D.list decodeMVTEndpoint)
 
 type alias XYZConfig =
-    { endpoints : Endpoints
+    { endpoints : List Endpoint
     , maxZoom : Int
     , minZoom : Int
     }
 
 
 type alias WMTSConfig =
-    { endpoints : Endpoints
+    { endpoints : List Endpoint
     , extent : Extent
     }
 
@@ -322,11 +322,6 @@ type alias WMSEndpoint =
     , nameField : String
     , idField : String
     }
-
-
-type Endpoints
-    = Single Endpoint
-    | Multiple (List Endpoint)
 
 
 type alias Endpoint =
@@ -731,6 +726,10 @@ getLayersForGroup group repo =
     group.layers
         |> List.filterMap (getLayerByKey repo)
 
+insertLayer : Layer -> Model -> Model
+insertLayer layer model =
+    updateLayer model layer
+
 
 getLayerByKey : LayerRepo -> LayerKey -> Maybe Layer
 getLayerByKey repo (LayerKey key) =
@@ -1046,15 +1045,11 @@ mapboxVectorTileLayerDecoder =
 xyzConfigDecoder : Decoder XYZConfig
 xyzConfigDecoder =
     D.succeed XYZConfig
-        |> required "endpoints" endpointsDecoder
+        |> required "endpoints" (D.list endpointDecoder)
         |> required "maxZoom" D.int
         |> required "minZoom" D.int
 
 
-endpointsDecoder : Decoder Endpoints
-endpointsDecoder =
-    D.succeed Multiple
-        |> custom (D.list endpointDecoder)
 
 
 endpointDecoder : Decoder Endpoint
@@ -1111,7 +1106,7 @@ wmtsLayerDecoder =
 wmtsConfigDecoder : Decoder WMTSConfig
 wmtsConfigDecoder =
     D.succeed WMTSConfig
-        |> required "endpoints" endpointsDecoder
+        |> required "endpoints" (D.list endpointDecoder)
         |> required "extent" extentDecoder
 
 
@@ -1462,7 +1457,7 @@ encodeLayerConfig config_ =
 encodeXYZLayer : XYZConfig -> E.Value
 encodeXYZLayer config =
     E.object
-        [ ( "endpoints", encodeEndpoints config.endpoints )
+        [ ( "endpoints", E.list encodeEndpoint config.endpoints )
         , ( "maxZoom", E.int config.maxZoom )
         , ( "minZoom", E.int config.minZoom )
         ]
@@ -1471,7 +1466,7 @@ encodeXYZLayer config =
 encodeWMTSLayer : WMTSConfig -> E.Value
 encodeWMTSLayer config =
     E.object
-        [ ( "endpoints", encodeEndpoints config.endpoints )
+        [ ( "endpoints", E.list encodeEndpoint config.endpoints )
         , ( "extent", encodeExtent config.extent )
         ]
 
@@ -1491,16 +1486,6 @@ encodeWMSLayer config =
         [ ("endpoints", encodeWMSEndpoints config.endpoints)
         , ("extent", encodeExtent config.extent)
         ]
-
-
-encodeEndpoints : Endpoints -> E.Value
-encodeEndpoints urlTemplates =
-    case urlTemplates of
-        Single url ->
-            E.list encodeEndpoint [ url ]
-
-        Multiple urls ->
-            E.list encodeEndpoint urls
 
 
 encodeEndpoint : Endpoint -> E.Value

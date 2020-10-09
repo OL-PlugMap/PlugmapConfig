@@ -264,6 +264,7 @@ view model =
                 [ Font.typeface "Lato"
                 , Font.sansSerif
                 ] 
+            , Font.size 15
             ] 
             <| switchView model 
             
@@ -334,7 +335,7 @@ configEditorView : EditingMode -> Config -> Element Msg
 configEditorView mode cfg =
     column
         [ centerX
-        , spacing 25
+        , spacing 5
         , width fill
         , height fill
         , padding 5
@@ -343,7 +344,7 @@ configEditorView mode cfg =
         , spacer
         , column
             [ centerX
-            , spacing 25
+            , spacing 5
             , width fill
             , height fill
             , padding 5
@@ -415,13 +416,13 @@ mapOptionsView opts =
         (x,y) = opts.center
     in
     column
-        [ spacing 15
+        [ spacing 5
         , width fill
         , padding 5
         ]
         [ text "Map Options"
         , row 
-            [ spacing 15
+            [ spacing 5
             , width fill
             ]
             [ el [ width <| px 125 ] <| text "Center (x,y)"
@@ -463,7 +464,7 @@ mapOptionsView opts =
                 }
             ]
         , row 
-            [ spacing 15
+            [ spacing 5
             ]
             [ el [ width <| px 125 ] <| text "Max Zoom"
             , Input.text
@@ -482,7 +483,7 @@ mapOptionsView opts =
                 }
             ]
         , row 
-            [ spacing 15
+            [ spacing 5
             ]
             [ el [ width <| px 125 ] <| text "Min Zoom"
             , Input.text
@@ -501,7 +502,7 @@ mapOptionsView opts =
                 }
             ]
         , row 
-            [ spacing 15
+            [spacing 5
             ]
             [ el [ width <| px 125 ] <| text "Target"
             , Input.text
@@ -517,7 +518,7 @@ mapOptionsView opts =
                 }
             ]
         , row 
-            [ spacing 15
+            [spacing 5
             ]
             [ el [ width <| px 125 ] <| text "Zoom"
             , Input.text
@@ -544,18 +545,62 @@ mapOptionsView opts =
 hierarchicalMapThemesView : Themes.Model -> Element Msg
 hierarchicalMapThemesView themes =
     column
-        [ spacing 15
+        [spacing 5
         , width fill
         , Border.width 1
         , padding 5
         ]
         [ text "Themes"
+        , el [ centerX] 
+            <| appButton 
+                "Add Category Before" 
+                ( { themes
+                    | layerCategories =  
+                            { key = Themes.stringToCategoryKey "cat_changeme"
+                            , name = ""
+                            , selection = Themes.Monoselection Nothing
+                            , multiphasic = True
+                            , transparency = 1
+                            , openness = Themes.Closed
+                            , usesRasterLegend = False
+                            , activeIcon = Themes.Icon ""
+                            , infoIcon = Themes.Icon ""    
+                            , layerGroups = []
+                            , hidden = False
+                            }
+                        :: themes.layerCategories
+                    }
+                    |> UpdateThemes
+                )
+                True
         , column
-            [ spacing 15
+            [spacing 5
             , width fill
             ]
             <| List.intersperse spacer
             <| List.indexedMap (mapThemesCategoryView themes) themes.layerCategories 
+        , el [ centerX] 
+            <| appButton 
+                "Add Category After" 
+                ( { themes
+                    | layerCategories = themes.layerCategories ++ 
+                        [   { key = Themes.stringToCategoryKey "cat_changeme"
+                            , name = ""
+                            , selection = Themes.Monoselection Nothing
+                            , multiphasic = True
+                            , transparency = 1
+                            , openness = Themes.Closed
+                            , usesRasterLegend = False
+                            , activeIcon = Themes.Icon ""
+                            , infoIcon = Themes.Icon ""    
+                            , layerGroups = []
+                            , hidden = False
+                            }
+                        ]
+                    }
+                    |> UpdateThemes
+                )
+                True
         ]
 
 makeLabel : String -> Element msg
@@ -581,7 +626,7 @@ mapThemesCategoryView themes index category =
         , width fill
         ]
         [ row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Key"
@@ -602,7 +647,8 @@ mapThemesCategoryView themes index category =
                 }
             ]
         , row 
-            [ spacing 10 
+            [spacing 6 
+            , width fill
             ]
             [ makeLabel "Name" 
             , Input.text
@@ -622,7 +668,8 @@ mapThemesCategoryView themes index category =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
+            , width fill
             ]
             [ makeLabel "Polyselective"
             , Input.checkbox
@@ -682,7 +729,8 @@ mapThemesCategoryView themes index category =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
+            , width fill
             ]
             [ makeLabel "Hidden"
             , Input.checkbox
@@ -702,7 +750,8 @@ mapThemesCategoryView themes index category =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
+            , width fill
             ]
             [ makeLabel "Multiphasic"
             , Input.checkbox
@@ -722,7 +771,7 @@ mapThemesCategoryView themes index category =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Transparency"
@@ -753,7 +802,8 @@ mapThemesCategoryView themes index category =
                 ]
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
+            , width fill
             ]
             [ makeLabel "Open By Default"
             , Input.checkbox
@@ -782,13 +832,126 @@ mapThemesCategoryView themes index category =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
-            [ makeLabel "Groups"
+            [ column 
+                []
+                [ makeLabel "Groups"
+                , appButton "Add Group" 
+                    ( 
+                        let
+                            newKey = Themes.stringToGroupKey "grp_changeme"
+                            newCat =
+                                { category
+                                | layerGroups = category.layerGroups ++
+                                    [ newKey
+                                    ]
+                                }
+                            newGrp = 
+                                { key = newKey
+                                , name = Nothing
+                                , openness = Themes.Closed
+                                , layers = []
+                                }
+                            newt = 
+                                { themes
+                                | layerCategories = before ++ [ newCat ] ++ after
+                                }
+            
+                        in
+                         Themes.updateGroup newt newGrp
+                         |> UpdateThemes
+
+                    )
+                    True
+                ]
             , column
                 [ width fill
                 ]
+                <| List.indexedMap
+                    ( \idxx -> \element ->
+                        column
+                        [ width fill
+                        , spacing 10
+                        ]
+                        [ spacer
+                        , appButton
+                            "Add Group Before"
+                            (
+                                let
+                                    be4 =
+                                        List.take idxx category.layerGroups
+                                    aft =
+                                        List.drop (idxx) category.layerGroups
+                                    newKey = Themes.stringToGroupKey <| "grp_changeme_" ++ ( String.fromInt <| List.length <| Dict.values themes.layerGroupRepo)
+                                    newCat =
+                                        { category
+                                        | layerGroups = be4 ++
+                                            [ newKey
+                                            ] ++ aft
+                                        }
+                                    newGrp = 
+                                        { key = newKey
+                                        , name = Nothing
+                                        , openness = Themes.Closed
+                                        , layers = []
+                                        }
+                                    
+
+                                    newThm = 
+                                        Themes.updateGroup
+                                            themes
+                                            newGrp
+                                    newt = 
+                                        { newThm
+                                        | layerCategories = before ++ [ newCat ] ++ after
+                                        }
+                                in
+                                UpdateThemes newt
+                                    
+                            )
+                            True
+                        , element
+                        , appButton
+                            "Add Group After"
+                            (
+                                let
+                                    be4 =
+                                        List.take (idxx+1) category.layerGroups
+                                    aft =
+                                        List.drop (idxx+1) category.layerGroups
+                                    newKey = Themes.stringToGroupKey <| "grp_changeme_" ++ ( String.fromInt <| List.length <| Dict.values themes.layerGroupRepo)
+                                    newCat =
+                                        { category
+                                        | layerGroups = be4 ++
+                                            [ newKey
+                                            ] ++ aft
+                                        }
+                                    newGrp = 
+                                        { key = newKey
+                                        , name = Nothing
+                                        , openness = Themes.Closed
+                                        , layers = []
+                                        }
+                                    
+
+                                    newThm = 
+                                        Themes.updateGroup
+                                            themes
+                                            newGrp
+                                    newt = 
+                                        { newThm
+                                        | layerCategories = before ++ [ newCat ] ++ after
+                                        }
+                                in
+                                UpdateThemes newt
+                                    
+                            )
+                            True
+                        , spacer
+                        ]
+                    )
                 <| List.map 
                     ( renderGroup themes category index
                     )
@@ -831,7 +994,7 @@ groupRenderer themes category index group =
         , spacing 3
         ]
         [ row 
-            [ spacing 10
+            [spacing 6
             , width fill 
             ]
             [ makeLabel "Key" 
@@ -840,14 +1003,54 @@ groupRenderer themes category index group =
                 { onChange = 
                     (\text ->
                         let
-                            newCat = 
-                                { group 
-                                | key = 
-                                    Themes.stringToGroupKey text
+
+                            newCat =
+                                { category
+                                | layerGroups = 
+                                    category.layerGroups
+                                    |> List.map
+                                        (\l ->
+                                            if l == group.key then
+                                                Themes.stringToGroupKey text
+                                            else
+                                                l
+                                        )
                                 }
+                            newGroup =
+                                { group 
+                                | key = Themes.stringToGroupKey text 
+                                }
+                                
+                            updootGroop newGrp thms =
+                                Themes.updateGroup thms newGrp
+
+                            catb4 =
+                                List.take index themes.layerCategories
+                            catA =
+                                List.drop (index + 1) themes.layerCategories
+
+                            updootCat newc t =
+                                { t 
+                                | layerCategories = catb4 ++ [ newc ] ++ catA
+                                }
+
                         in
-                        updoot newCat
+                        Themes.removeGroup themes group.key
+                        |> updootGroop newGroup
+                        |> updootCat newCat
+                        |> UpdateThemes
                     )
+
+                    -- (\text ->
+                    --     let
+                    --         newCat = 
+                    --             { group 
+                    --             | key = 
+                    --                 Themes.stringToGroupKey text
+                    --             }
+                    --     in
+                    --     updoot newCat
+                    -- )
                 , placeholder = Nothing
                 , label = Input.labelHidden <|  "Key"
                 , text = 
@@ -855,7 +1058,7 @@ groupRenderer themes category index group =
                 }
             ]
         , row 
-            [ spacing 10 
+            [spacing 6 
             , width fill 
             ]
             [ makeLabel "Name" 
@@ -882,7 +1085,8 @@ groupRenderer themes category index group =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
+            , width fill
             ]
             [ makeLabel "Open By Default"
             , Input.checkbox
@@ -911,7 +1115,7 @@ groupRenderer themes category index group =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ column
@@ -921,7 +1125,7 @@ groupRenderer themes category index group =
                     "Add Layer" 
                     (
                         let
-                            newKey = Themes.stringToLayerKey "lyr_change_me"
+                            newKey = Themes.stringToLayerKey <| "lyr_change_me_" ++ String.fromInt( List.length <| Dict.values <| themes.layerRepo )
 
                             newLayer = 
                                 { key = newKey
@@ -949,8 +1153,83 @@ groupRenderer themes category index group =
                 ]
             , column
                 [ width fill
-                , spacing 5
+                , spacing 25
                 ]
+                <| List.indexedMap
+                    ( \idxx -> \element ->
+                        column
+                        [ width fill
+                        , spacing 10
+                        ]
+                        [ spacer
+                        , appButton
+                            "Add Layer Before"
+                            (
+                                let
+                                    be4 =
+                                        List.take idxx group.layers
+                                    aft =
+                                        List.drop (idxx) group.layers
+                                    newKey = Themes.stringToLayerKey <| "lyr_change_me_" ++ String.fromInt( List.length <| Dict.values <| themes.layerRepo )
+                                    newLayer = 
+                                        { key = newKey
+                                        , name = ""
+                                        , opacity = Nothing
+                                        , config = Themes.UnknownLayer
+                                        , legend = Nothing
+                                        , identify = Nothing
+                                        }
+                                    
+                                    newGroup =
+                                        { group 
+                                        | layers = be4 ++ [ newKey ] ++ aft
+                                        }
+
+                                    newThm = 
+                                        Themes.updateGroup
+                                            ( Themes.insertLayer newLayer themes)
+                                            newGroup
+                                in
+                                UpdateThemes
+                                    newThm
+                            )
+                            True
+                        , element
+                        , appButton
+                            "Add Layer After"
+                            (
+                                let
+                                    be4 =
+                                        List.take (idxx+1) group.layers
+                                    aft =
+                                        List.drop (idxx+1) group.layers
+                                    newKey = Themes.stringToLayerKey <| "lyr_change_me_" ++ String.fromInt( List.length <| Dict.values <| themes.layerRepo )
+                                    newLayer = 
+                                        { key = newKey
+                                        , name = ""
+                                        , opacity = Nothing
+                                        , config = Themes.UnknownLayer
+                                        , legend = Nothing
+                                        , identify = Nothing
+                                        }
+                                    
+                                    newGroup =
+                                        { group 
+                                        | layers = be4 ++ [ newKey ] ++ aft
+                                        }
+
+                                    newThm = 
+                                        Themes.updateGroup
+                                            ( Themes.insertLayer newLayer themes)
+                                            newGroup
+                                in
+                                UpdateThemes
+                                    newThm
+                            )
+                            True
+                        , spacer
+                        ]
+                    )
                 <| List.map 
                     ( renderLayer themes category index group
                     )
@@ -999,12 +1278,14 @@ layerRenderer themes category index group layer =
         
         isSelected =
             case category.selection of
-                Themes.Monoselection (Just key) ->
-                    key == layer.key
+                Themes.Monoselection (key) ->
+                    key == Just layer.key
                 Themes.Polyselection lis ->
                     List.member layer.key lis
-                _ ->
-                    False
+                Themes.EnforcedPolyselection a lis ->
+                    a == layer.key || List.member layer.key lis 
+                Themes.EnforcedMonoselection key ->
+                    layer.key == key
         updootGroop newGrp t =
             Themes.updateGroup t newGrp
     in
@@ -1013,7 +1294,8 @@ layerRenderer themes category index group layer =
         , spacing 3
         ]
         [ row 
-            [ spacing 10 
+            [ spacing 6 
+            , width fill
             ]
             [ makeLabel "Key" 
             , Input.text
@@ -1047,8 +1329,12 @@ layerRenderer themes category index group layer =
                                 else
                                     thm
 
+                            removeLay l t =
+                                Themes.removeLayer t l
+
                         in
                         updootLay newCat
+                        |> removeLay layer.key
                         |> updootGroop newGroup
                         |> newThm
                         |> UpdateThemes
@@ -1060,7 +1346,8 @@ layerRenderer themes category index group layer =
                 }
             ]
         , row 
-            [ spacing 10 
+            [spacing 6
+            , width fill 
             ]
             [ makeLabel "Name" 
             , Input.text
@@ -1082,7 +1369,8 @@ layerRenderer themes category index group layer =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
+            , width fill
             ]
             [ makeLabel "Selected"
             , Input.checkbox
@@ -1099,7 +1387,7 @@ layerRenderer themes category index group layer =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Opacity"
@@ -1131,13 +1419,385 @@ layerRenderer themes category index group layer =
                 ]
             ]
         , row
-            [ spacing 10 
+            [ spacing 6 
             , width fill
             ]
             [ makeLabel "Config"
             , layerConfigRenderer themes category index layer
             ]
+        , row
+            [ spacing 6 
+            , width fill
+            ]
+            [ makeLabel "Identify"
+            , identifyRenderer themes category index layer layer.identify
+            ]
         ]
+
+identifyRenderer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.Layer -> Maybe Themes.Identify -> Element Msg
+identifyRenderer themes category index layer identify =
+    let
+        updateLayerIdent newIdent =
+            { layer
+            | identify = Just newIdent
+            }
+            |> Themes.updateLayer themes
+            |> UpdateThemes
+    in
+    column
+        [ Border.width 1
+        , padding 3
+        , width fill
+        ]
+    <| case identify of
+        Nothing ->
+            [ appButton 
+                "Add" 
+                (   let
+                        newDataMapping =
+                            { title =
+                                { name = "Name"
+                                , fieldType = Themes.Query "Name"
+                                }
+                            , id =
+                                { name = "ID"
+                                , fieldType = Themes.Query "ID"
+                                }
+                            , fields = []
+                            }
+                        newIdent = 
+                            { enabled = True
+                            , dataMapping = newDataMapping
+                            , canViewDetails = False
+                            , idTransform = 0
+                            , typeKey = "CHANGEME"
+                            , queryLayerIds = Nothing
+                            , tolerance = Nothing
+                            }
+                        newLayer =
+                            { layer
+                            | identify = Just newIdent
+                            }
+                    in
+                    Themes.updateLayer themes newLayer
+                    |> UpdateThemes
+                )
+                True
+            ]
+        Just ident ->
+            [ row
+                [spacing 6 
+                ]
+                [ makeLabel "Enabled"
+                , Input.checkbox
+                    []
+                    { onChange = 
+                        (\val ->
+                            let
+                                newIdent = 
+                                    { ident 
+                                    | enabled = val
+                                    }
+                                newLayer =
+                                    { layer
+                                    | identify = Just newIdent
+                                    }
+                            in
+                            Themes.updateLayer themes newLayer
+                            |> UpdateThemes
+                        )
+                    , icon = Input.defaultCheckbox
+                    , label = Input.labelHidden <|  "Hidden"
+                    , checked = 
+                        ident.enabled
+                    }
+                ]
+            , row
+                [spacing 6 
+                ]
+                [ makeLabel "View Details"
+                , Input.checkbox
+                    []
+                    { onChange = 
+                        (\val ->
+                            let
+                                newIdent = 
+                                    { ident 
+                                    | enabled = val
+                                    }
+                                newLayer =
+                                    { layer
+                                    | identify = Just newIdent
+                                    }
+                            in
+                            Themes.updateLayer themes newLayer
+                            |> UpdateThemes
+                        )
+                    , icon = Input.defaultCheckbox
+                    , label = Input.labelHidden <|  "Hidden"
+                    , checked = 
+                        ident.enabled
+                    }
+                ]
+            , row 
+                [spacing 6 
+                , width fill 
+                ]
+                [ makeLabel "Query Layer IDs" 
+                , Input.text
+                    []
+                    { onChange = 
+                        (\text ->
+                            let
+                                idss =
+                                    String.split "," text
+
+                                ids =
+                                    List.filterMap String.toInt idss
+                                newIdent = 
+                                    { ident 
+                                    | queryLayerIds = 
+                                        if List.length ids > 0 then
+                                            Just ids
+                                        else
+                                            Nothing
+                                    }
+                                newLayer =
+                                    { layer
+                                    | identify = Just newIdent
+                                    }
+                            in
+                            Themes.updateLayer themes newLayer
+                            |> UpdateThemes
+                        )
+                    , placeholder = Nothing
+                    , label = Input.labelHidden <|  "Query Layer IDs"
+                    , text = 
+                        ident.queryLayerIds |> Maybe.map (List.map String.fromInt >> String.join ",") |> Maybe.withDefault ""
+                    }
+                ]
+            , row
+                [ spacing 6 
+                , width fill
+                ]
+                [ makeLabel "Data Mapping"
+                , column
+                    [ width fill
+                    , Border.width 1
+                    , padding 3
+                    , spacing 5
+                    ]
+                    ( ( [ row
+                        [spacing 6 
+                        , width fill
+                        ]
+                        [ makeLabel "Title"
+                        , identifyFieldView ident.dataMapping.title 
+                            |> El.map 
+                                ( \iif -> 
+                                    let
+
+                                        newIdent = 
+                                            { ident 
+                                            | dataMapping = newDataMapping
+                                            }
+                                        odm = ident.dataMapping
+                                        newDataMapping =
+                                            { odm 
+                                            | title = iif
+                                            }
+                                    in 
+                                    updateLayerIdent newIdent
+                                )
+                        ]
+                    , row
+                        [spacing 6 
+                        , width fill
+                        ]
+                        [ makeLabel "ID"
+                        , identifyFieldView ident.dataMapping.id 
+                            |> El.map 
+                                ( \iif -> 
+                                    let
+
+                                        newIdent = 
+                                            { ident 
+                                            | dataMapping = newDataMapping
+                                            }
+                                        odm = ident.dataMapping
+                                        newDataMapping =
+                                            { odm 
+                                            | id = iif
+                                            }
+                                    in 
+                                    updateLayerIdent newIdent
+                                )
+                        ]
+                    , spacer
+                    , el [ centerX ] <| text "Additional Fields"
+                    ] )
+                    ++
+                    ( List.indexedMap
+                        ( \idx -> \field ->
+                            let
+                                before = List.take idx ident.dataMapping.fields
+                                after = List.drop (idx + 1) ident.dataMapping.fields
+                            in
+                            identifyFieldView field 
+                            |> El.map 
+                                ( \iif -> 
+                                    let
+
+                                        newIdent = 
+                                            { ident 
+                                            | dataMapping = newDataMapping
+                                            }
+                                        odm = ident.dataMapping
+                                        newDataMapping =
+                                            { odm 
+                                            | fields = before ++ [ iif ] ++ after
+                                            }
+                                    in 
+                                    updateLayerIdent newIdent
+                                )
+                        ) 
+                        ident.dataMapping.fields
+                    ) 
+                    ++
+                    ( [ appButton "Add Field"
+                        ( let
+                                newIdent = 
+                                    { ident 
+                                    | dataMapping = newDataMapping
+                                    }
+                                odm = ident.dataMapping
+                                newf =
+                                    { name = ""
+                                    , fieldType = Themes.Query ""
+                                    }
+                                newDataMapping =
+                                    { odm 
+                                    | fields = odm.fields ++ [ newf ]
+                                    }
+                            in 
+                            updateLayerIdent newIdent
+                        )
+                        True
+                        ]
+                    )
+                    )
+                ]
+            ]
+
+identifyFieldView : Themes.IdentifyField -> Element Themes.IdentifyField
+identifyFieldView field =
+    row
+        [ width fill
+        , spacing 10
+        ]
+        [ row 
+                [spacing 6 
+                , width fill 
+                ]
+                [ makeLabel "Name" 
+                , Input.text
+                    []
+                    { onChange = 
+                        (\text ->
+                           { field 
+                           | name = text
+                           }
+                        )
+                    , placeholder = Nothing
+                    , label = Input.labelHidden <|  "Name"
+                    , text = 
+                        field.name
+                    }
+                ]
+        , row 
+            [spacing 6 
+            , width fill 
+            ]
+            [ makeLabel "Field Type" 
+            , column
+                [ width fill
+                ]
+                [ Input.radioRow
+                    [ padding 10
+                    , spacing 20
+                    ]
+                    { onChange = 
+                        (\newOpt ->
+                            let
+                                newConf =
+                                    case newOpt of
+                                        "Query" -> 
+                                            Themes.Query
+                                                ""
+                                        "Static" -> 
+                                            Themes.Static
+                                                ""
+                                        "Map" ->
+                                            Themes.Map
+                                                { query = ""
+                                                , values = Dict.empty
+                                                }
+                                        _ ->
+                                            Themes.Static
+                                                ""
+                            in
+                                { field 
+                                | fieldType = newConf
+                                }
+                        )
+                    , selected = 
+                        Just 
+                        <| case field.fieldType of
+                            Themes.Query _ -> "Query"
+                            Themes.Static _ -> "Static"
+                            Themes.Map _ -> "Map"
+
+                    , label = Input.labelHidden "Field Type"
+                    , options =
+                        [ Input.option "Query" (text "Query")
+                        , Input.option "Static" (text "Static")
+                        , Input.option "Map" (text "Map")
+                        ]
+                    }
+                , case field.fieldType of
+                    Themes.Query ql -> 
+                        Input.text
+                        []
+                        { onChange = 
+                            (\text ->
+                                { field 
+                                | fieldType = Themes.Query text
+                                }
+                            )
+                        , placeholder = Nothing
+                        , label = Input.labelHidden <|  "Query"
+                        , text = 
+                            ql
+                        }
+                    Themes.Static ql -> 
+                        Input.text
+                        []
+                        { onChange = 
+                            (\text ->
+                                { field 
+                                | fieldType = Themes.Static text
+                                }
+                            )
+                        , placeholder = Nothing
+                        , label = Input.labelHidden <|  "Static"
+                        , text = 
+                            ql
+                        }
+                    Themes.Map _ -> text "TODO"
+                ]
+            ]
+        ]
+
 
 emptyExtent = [0,0,0,0]
 
@@ -1155,13 +1815,13 @@ layerConfigRenderer themes category index layer =
     in
     column
         [ width fill
-        , spacing 10
+        ,spacing 6
         , Border.width 1
         , padding 5
         ]
         [ text 
             <| textualValue
-        , Input.radio
+        , Input.radioRow
             [ padding 10
             , spacing 20
             ]
@@ -1245,7 +1905,7 @@ renderESRIMapService themes layer config =
         , padding 5
         ]
         [ row 
-            [ spacing 10 
+            [spacing 6 
             ]
             [ makeLabel "Layer Definitions" 
             , Input.text
@@ -1271,7 +1931,7 @@ renderESRIMapService themes layer config =
                 }
             ]
         , row 
-            [ spacing 10 
+            [spacing 6 
             ]
             [ makeLabel "Extent" 
             , row
@@ -1302,7 +1962,7 @@ renderESRIMapService themes layer config =
                     config.extent
             ]
         , row 
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ column
@@ -1363,7 +2023,7 @@ renderEsriMapServiceEndpoint themes layer config index endpoint =
         , spacing 3
         ]
         [ row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Token Key"
@@ -1387,7 +2047,7 @@ renderEsriMapServiceEndpoint themes layer config index endpoint =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "URL"
@@ -1404,7 +2064,7 @@ renderEsriMapServiceEndpoint themes layer config index endpoint =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Z-Index"
@@ -1413,6 +2073,30 @@ renderEsriMapServiceEndpoint themes layer config index endpoint =
                 , spacing 5
                 ]
                 [ endpoint.zIndex |> String.fromInt |> makeLabel
+                , simpleAppButton
+                    "-100"
+                    (
+                        { endpoint 
+                        | zIndex = endpoint.zIndex - 100
+                        }
+                        |> updoot
+                    )
+                , simpleAppButton
+                    "-10"
+                    (
+                        { endpoint 
+                        | zIndex = endpoint.zIndex - 10
+                        }
+                        |> updoot
+                    )
+                , simpleAppButton
+                    "-1"
+                    (
+                        { endpoint 
+                        | zIndex = endpoint.zIndex - 1
+                        }
+                        |> updoot
+                    )
                 , Input.slider
                     [ width fill
                     , Bg.color <| rgb 0.9 0.9 0.9
@@ -1424,17 +2108,41 @@ renderEsriMapServiceEndpoint themes layer config index endpoint =
                             }
                             |> updoot
                         )
-                    , label = Input.labelHidden <|  "Multiphasic"
+                    , label = Input.labelHidden <|  "Z-Index"
                     , min = 0
                     , max = 1000
                     , step = Just 1
                     , value = endpoint.zIndex |> toFloat
                     , thumb = Input.defaultThumb
                     }
+                , simpleAppButton
+                    "+1"
+                    (
+                        { endpoint 
+                        | zIndex = endpoint.zIndex + 1
+                        }
+                        |> updoot
+                    )
+                , simpleAppButton
+                    "+10"
+                    (
+                        { endpoint 
+                        | zIndex = endpoint.zIndex + 10
+                        }
+                        |> updoot
+                    )
+                , simpleAppButton
+                    "+100"
+                    (
+                        { endpoint 
+                        | zIndex = endpoint.zIndex + 100
+                        }
+                        |> updoot
+                    )
                 ]
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Layers To Show"
@@ -1457,7 +2165,7 @@ renderEsriMapServiceEndpoint themes layer config index endpoint =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Layer Definitions"
@@ -1480,7 +2188,7 @@ renderEsriMapServiceEndpoint themes layer config index endpoint =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Bounding Box"
@@ -1518,7 +2226,7 @@ renderMVTConfig themes layer config =
             |> UpdateThemes
     in
      row 
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ column
@@ -1584,7 +2292,7 @@ renderMVTEndpoint themes layer config index endpoint =
         , spacing 3
         ]
         [ row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Token Key"
@@ -1608,7 +2316,7 @@ renderMVTEndpoint themes layer config index endpoint =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "URL"
@@ -1625,7 +2333,7 @@ renderMVTEndpoint themes layer config index endpoint =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Z-Index"
@@ -1655,7 +2363,7 @@ renderMVTEndpoint themes layer config index endpoint =
                 ]
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Style"
@@ -1672,7 +2380,7 @@ renderMVTEndpoint themes layer config index endpoint =
                 }
             ]
         , row
-            [ spacing 10 
+            [spacing 6 
             , width fill
             ]
             [ makeLabel "Filter"
@@ -1705,7 +2413,7 @@ loadFromTextView step =
     case step of
         New txt ->
             column
-                [ spacing 10
+                [spacing 6
                 , centerX
                 ]
                 [ text "Enter the config text below and click Load!"
@@ -1728,7 +2436,7 @@ loadFromTextView step =
             text "Parsamooting..."
         ErrorParsing err ->
             column
-                [ spacing 10
+                [spacing 6
                 , centerX
                 ]
                 [ text "Error Parsamooting"
@@ -1820,6 +2528,20 @@ appButton label action enabled =
                 Nothing
         }
 
+simpleAppButton : String -> msg -> Element msg
+simpleAppButton label action =
+    Input.button
+        [ padding 10
+        , height <| px 50
+        , Border.rounded 1
+        , Border.width 1
+        , centerX
+        ]
+        { label =
+            text label
+        , onPress =
+                Just action
+        }
 
 
 ---- PROGRAM ----

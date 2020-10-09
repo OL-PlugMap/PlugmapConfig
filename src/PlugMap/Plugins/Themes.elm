@@ -362,6 +362,7 @@ type alias Identify =
 
 type alias IdentifyDataMapping =
     { title : IdentifyField
+    , id : IdentifyField
     , fields : List IdentifyField
     }
 
@@ -747,10 +748,22 @@ updateGroup model group =
     | layerGroupRepo = Dict.insert (groupKeyToString group.key) group model.layerGroupRepo
     }
 
+removeGroup : Model -> GroupKey -> Model
+removeGroup model grp =
+    { model 
+    | layerGroupRepo = Dict.remove (groupKeyToString grp) model.layerGroupRepo
+    }
+
 updateLayer : Model -> Layer -> Model
 updateLayer model layer =
     { model 
     | layerRepo = Dict.insert (layerKeyToString layer.key) layer model.layerRepo
+    }
+
+removeLayer : Model -> LayerKey -> Model
+removeLayer model layer =
+    { model 
+    | layerRepo = Dict.remove (layerKeyToString layer) model.layerRepo
     }
 
 layersWithIdentify : LayerRepo -> List Layer
@@ -1166,6 +1179,7 @@ identifyDataMappingDecoder : D.Decoder IdentifyDataMapping
 identifyDataMappingDecoder =
     D.succeed IdentifyDataMapping
         |> required "title" identifyFieldDecoder
+        |> required "id" identifyFieldDecoder
         |> required "fields" (D.list identifyFieldDecoder)
 
 
@@ -1538,7 +1552,9 @@ encodeIdentify id =
 encodeIdentifyDataMapping : IdentifyDataMapping -> E.Value
 encodeIdentifyDataMapping idm =
     E.object
-        [ ( "fields", E.list encodeIdentifyField idm.fields )
+        [ ( "title", encodeIdentifyField idm.title )
+        , ( "id", encodeIdentifyField idm.id )
+        , ( "fields", E.list encodeIdentifyField idm.fields )
         ]
 
 

@@ -45,6 +45,9 @@ type alias Model =
     { state : State
     , key : Nav.Key
     , editorMode : EditingMode
+    , hiddenCats : List String
+    , hiddenGrps : List String
+    , hiddenLays : List String
     }
 
 type State 
@@ -77,7 +80,13 @@ type alias Config =
 
 init : D.Value -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init params url key =
-    ( { state = MainMenu, key = key, editorMode = Hierarchical }
+    (   { state = MainMenu
+        , key = key
+        , editorMode = Hierarchical 
+        , hiddenCats = []
+        , hiddenGrps = []
+        , hiddenLays = []
+        }
     , Process.sleep 500 
             |> Task.perform ( always <| Init )
     )
@@ -103,6 +112,9 @@ type Msg
     | UpdateThemes Themes.Model
 
     | ExportClick Config
+
+    | HideCat String
+    | ShowCat String
 
 type EditingMode
     = Hierarchical
@@ -232,6 +244,19 @@ update msg model =
             , Cmd.none
             )
 
+        HideCat key ->
+            ( { model 
+                | hiddenCats = key :: model.hiddenCats
+                }
+            , Cmd.none
+            )
+
+        ShowCat key ->
+            ( { model 
+                | hiddenCats = List.filter (\i -> i /= key ) model.hiddenCats
+                }
+            , Cmd.none
+            )
 
         _ ->
             ( model, Cmd.none )
@@ -281,7 +306,7 @@ switchView model =
         LoadConfig mode step ->
             loadView mode step
         Editing cfg ->
-            configEditorView model.editorMode cfg
+            configEditorView model model.editorMode cfg
         Export cfg ->
             exportView cfg
         Error ->
@@ -331,8 +356,8 @@ exportView config =
         ]
 
 
-configEditorView : EditingMode -> Config -> Element Msg
-configEditorView mode cfg =
+configEditorView : Model -> EditingMode -> Config -> Element Msg
+configEditorView model mode cfg =
     column
         [ centerX
         , spacing 5
@@ -358,7 +383,7 @@ configEditorView mode cfg =
             , spacer
             , case mode of
                 Hierarchical ->
-                    hierarchicalMapThemesView cfg.themes
+                    hierarchicalMapThemesView model cfg.themes
                 Flat ->
                     text "TODO"
                 SequenceLayers -> 
@@ -542,8 +567,8 @@ mapOptionsView opts =
             ]
         ]
 
-hierarchicalMapThemesView : Themes.Model -> Element Msg
-hierarchicalMapThemesView themes =
+hierarchicalMapThemesView : Model -> Themes.Model -> Element Msg
+hierarchicalMapThemesView model themes =
     column
         [spacing 5
         , width fill
@@ -551,34 +576,147 @@ hierarchicalMapThemesView themes =
         , padding 5
         ]
         [ text "Themes"
-        , el [ centerX] 
-            <| appButton 
-                "Add Category Before" 
-                ( { themes
-                    | layerCategories =  
-                            { key = Themes.stringToCategoryKey "cat_changeme"
-                            , name = ""
-                            , selection = Themes.Monoselection Nothing
-                            , multiphasic = True
-                            , transparency = 1
-                            , openness = Themes.Closed
-                            , usesRasterLegend = False
-                            , activeIcon = Themes.Icon ""
-                            , infoIcon = Themes.Icon ""    
-                            , layerGroups = []
-                            , hidden = False
-                            }
-                        :: themes.layerCategories
-                    }
-                    |> UpdateThemes
-                )
-                True
         , column
             [spacing 5
             , width fill
             ]
-            <| List.intersperse spacer
-            <| List.indexedMap (mapThemesCategoryView themes) themes.layerCategories 
+                <| List.indexedMap
+                    ( \idxx -> \element ->
+                        column
+                        [ width fill
+                        , spacing 10
+                        ]
+                        [ spacer
+                        , row 
+                            [ width fill
+                            , spacing 5
+                            ] 
+                            [ el [ alignLeft ] 
+                                <| simpleAppButton "Delete"
+                                    (
+                                        let
+                                            be4 =
+                                                List.take idxx themes.layerCategories
+                                            aft =
+                                                List.drop (idxx+1) themes.layerCategories
+                                            
+                                        in
+                                        { themes
+                                        | layerCategories =  
+                                                be4 ++ aft
+                                        }
+                                        |> UpdateThemes
+                                            
+                                    )
+                            , el [ alignLeft ] 
+                                <| simpleAppButton "Up"
+                                    (
+                                        let
+                                            be4 =
+                                                List.take (idxx-1) themes.layerCategories
+                                            thiscat =
+                                                List.drop (idxx-1) themes.layerCategories
+                                                |> List.take 2
+                                                |> List.reverse
+
+                                            aft =
+                                                List.drop (idxx+1) themes.layerCategories
+                                            
+                                        in
+                                        { themes
+                                        | layerCategories =  
+                                                be4 ++ thiscat ++ aft
+                                        }
+                                        |> UpdateThemes
+                                            
+                                    )
+                            , el [ alignLeft ] 
+                                <| simpleAppButton "Dwn"
+                                    (
+                                        let
+                                            be4 =
+                                                List.take (idxx-1) themes.layerCategories
+                                            thiscat =
+                                                List.drop (idxx) themes.layerCategories
+                                                |> List.take 2
+                                                |> List.reverse
+                                            aft =
+                                                List.drop (idxx+2) themes.layerCategories
+                                            
+                                        in
+                                        { themes
+                                        | layerCategories =  
+                                                be4 ++ thiscat ++ aft
+                                        }
+                                        |> UpdateThemes
+                                            
+                                    )
+                            , appButton
+                                "Add Category Before"
+                                (
+                                    let
+                                        be4 =
+                                            List.take idxx themes.layerCategories
+                                        aft =
+                                            List.drop (idxx) themes.layerCategories
+                                        newc =
+                                            { key = Themes.stringToCategoryKey "cat_changeme"
+                                            , name = ""
+                                            , selection = Themes.Monoselection Nothing
+                                            , multiphasic = True
+                                            , transparency = 1
+                                            , openness = Themes.Closed
+                                            , usesRasterLegend = False
+                                            , activeIcon = Themes.Icon ""
+                                            , infoIcon = Themes.Icon ""    
+                                            , layerGroups = []
+                                            , hidden = False
+                                            }
+                                    in
+                                    { themes
+                                    | layerCategories =  
+                                            be4 ++ [ newc ] ++ aft
+                                    }
+                                    |> UpdateThemes
+                                        
+                                )
+                                True
+                            ]
+                        , element
+                        , appButton
+                            "Add Category After"
+                            (
+                                let
+                                    be4 =
+                                        List.take (idxx+1) themes.layerCategories
+                                    aft =
+                                        List.drop (idxx+1) themes.layerCategories
+                                    newc =
+                                        { key = Themes.stringToCategoryKey "cat_changeme"
+                                        , name = ""
+                                        , selection = Themes.Monoselection Nothing
+                                        , multiphasic = True
+                                        , transparency = 1
+                                        , openness = Themes.Closed
+                                        , usesRasterLegend = False
+                                        , activeIcon = Themes.Icon ""
+                                        , infoIcon = Themes.Icon ""    
+                                        , layerGroups = []
+                                        , hidden = False
+                                        }
+                                in
+                                { themes
+                                | layerCategories =  
+                                        be4 ++ [ newc ] ++ aft
+                                }
+                                |> UpdateThemes
+                                    
+                            )
+                            True
+                        , spacer
+                        ]
+                    )
+            <| List.indexedMap (mapThemesCategoryView model themes) themes.layerCategories 
         , el [ centerX] 
             <| appButton 
                 "Add Category After" 
@@ -610,8 +748,8 @@ makeLabel val =
         ]
         <| text val
 
-mapThemesCategoryView : Themes.Model -> Int -> Themes.LayerCategory -> Element Msg
-mapThemesCategoryView themes index category =
+mapThemesCategoryView : Model -> Themes.Model -> Int -> Themes.LayerCategory -> Element Msg
+mapThemesCategoryView model themes index category =
     let
         before = List.take index themes.layerCategories
         after = List.drop (index + 1) themes.layerCategories
@@ -625,340 +763,354 @@ mapThemesCategoryView themes index category =
         [ spacing 5 
         , width fill
         ]
-        [ row
-            [spacing 6 
-            , width fill
-            ]
-            [ makeLabel "Key"
-            , Input.text
-                []
-                { onChange = 
-                    (\text ->
-                        let
-                            newCat = 
-                                { category | key = Themes.stringToCategoryKey text }
-                        in
-                        updoot newCat
-                    )
-                , placeholder = Nothing
-                , label = Input.labelHidden <|  "Key"
-                , text = 
-                    Themes.categoryKeyToString category.key
-                }
-            ]
-        , row 
-            [spacing 6 
-            , width fill
-            ]
-            [ makeLabel "Name" 
-            , Input.text
-                []
-                { onChange = 
-                    (\text ->
-                        let
-                            newCat = 
-                                { category | name = text }
-                        in
-                        updoot newCat
-                    )
-                , placeholder = Nothing
-                , label = Input.labelHidden <|  "Name"
-                , text = 
-                    category.name
-                }
-            ]
-        , row
-            [spacing 6 
-            , width fill
-            ]
-            [ makeLabel "Polyselective"
-            , Input.checkbox
-                []
-                { onChange = 
-                    (\val ->
-                        let
-                            newCat = 
-                                if val then
-                                    case category.selection of
-                                        Themes.Monoselection kv ->
-                                            { category 
-                                            | selection = 
-                                                Themes.Polyselection 
-                                                    <| case kv of
-                                                        Just k -> [k]
-                                                        Nothing -> []
-                                            }
-                                        Themes.EnforcedMonoselection k ->
-                                            { category 
-                                            | selection = 
-                                                Themes.Polyselection 
-                                                    [k]
-                                            }
-                                        _ ->
-                                            { category 
-                                            | selection = 
-                                                Themes.Polyselection []
-                                            }
-                                else
-                                    case category.selection of
-                                        Themes.Polyselection kv ->
-                                            { category 
-                                            | selection = 
-                                                Themes.Monoselection <| List.head kv
-                                            }
-                                        Themes.EnforcedMonoselection k ->
-                                            { category 
-                                            | selection = 
-                                                Themes.Monoselection <| Just k
-                                            }
-                                        _ ->
-                                            { category 
-                                            | selection = 
-                                                Themes.Monoselection Nothing
-                                            }
-
-                        in
-                        updoot newCat
-                    )
-                , icon = Input.defaultCheckbox
-                , label = Input.labelHidden <|  "Hidden"
-                , checked = 
-                    case category.selection of
-                        Themes.Polyselection _ -> True
-                        _ -> False
-                }
-            ]
-        , row
-            [spacing 6 
-            , width fill
-            ]
-            [ makeLabel "Hidden"
-            , Input.checkbox
-                []
-                { onChange = 
-                    (\val ->
-                        let
-                            newCat = 
-                                { category | hidden = val }
-                        in
-                        updoot newCat
-                    )
-                , icon = Input.defaultCheckbox
-                , label = Input.labelHidden <|  "Hidden"
-                , checked = 
-                    category.hidden
-                }
-            ]
-        , row
-            [spacing 6 
-            , width fill
-            ]
-            [ makeLabel "Multiphasic"
-            , Input.checkbox
-                []
-                { onChange = 
-                    (\val ->
-                        let
-                            newCat = 
-                                { category | multiphasic = val }
-                        in
-                        updoot newCat
-                    )
-                , icon = Input.defaultCheckbox
-                , label = Input.labelHidden <|  "Multiphasic"
-                , checked = 
-                    category.multiphasic
-                }
-            ]
-        , row
-            [spacing 6 
-            , width fill
-            ]
-            [ makeLabel "Transparency"
-            , row
+        <| if List.member (Themes.categoryKeyToString category.key) model.hiddenCats then
+            [ row
                 [ width fill
-                , spacing 5
                 ]
-                [ makeLabel <| ( String.fromInt ( floor ( category.transparency * 100 ) ) ) ++ "%"
-                , Input.slider
-                    [ width fill
-                    , Bg.color <| rgb 0.9 0.9 0.9
-                    ]
+                [ text <| Themes.categoryKeyToString category.key
+                , simpleAppButton
+                    "Show"
+                    (ShowCat <| Themes.categoryKeyToString category.key)
+                ]
+            ]
+        else
+            [ row
+                [spacing 6 
+                , width fill
+                ]
+                [ makeLabel "Key"
+                , Input.text
+                    []
+                    { onChange = 
+                        (\text ->
+                            let
+                                newCat = 
+                                    { category | key = Themes.stringToCategoryKey text }
+                            in
+                            updoot newCat
+                        )
+                    , placeholder = Nothing
+                    , label = Input.labelHidden <|  "Key"
+                    , text = 
+                        Themes.categoryKeyToString category.key
+                    }
+                , simpleAppButton
+                    "Hide"
+                    (HideCat <| Themes.categoryKeyToString category.key)
+                ]
+            , row 
+                [spacing 6 
+                , width fill
+                ]
+                [ makeLabel "Name" 
+                , Input.text
+                    []
+                    { onChange = 
+                        (\text ->
+                            let
+                                newCat = 
+                                    { category | name = text }
+                            in
+                            updoot newCat
+                        )
+                    , placeholder = Nothing
+                    , label = Input.labelHidden <|  "Name"
+                    , text = 
+                        category.name
+                    }
+                ]
+            , row
+                [spacing 6 
+                , width fill
+                ]
+                [ makeLabel "Polyselective"
+                , Input.checkbox
+                    []
                     { onChange = 
                         (\val ->
                             let
                                 newCat = 
-                                    { category | transparency = val }
+                                    if val then
+                                        case category.selection of
+                                            Themes.Monoselection kv ->
+                                                { category 
+                                                | selection = 
+                                                    Themes.Polyselection 
+                                                        <| case kv of
+                                                            Just k -> [k]
+                                                            Nothing -> []
+                                                }
+                                            Themes.EnforcedMonoselection k ->
+                                                { category 
+                                                | selection = 
+                                                    Themes.Polyselection 
+                                                        [k]
+                                                }
+                                            _ ->
+                                                { category 
+                                                | selection = 
+                                                    Themes.Polyselection []
+                                                }
+                                    else
+                                        case category.selection of
+                                            Themes.Polyselection kv ->
+                                                { category 
+                                                | selection = 
+                                                    Themes.Monoselection <| List.head kv
+                                                }
+                                            Themes.EnforcedMonoselection k ->
+                                                { category 
+                                                | selection = 
+                                                    Themes.Monoselection <| Just k
+                                                }
+                                            _ ->
+                                                { category 
+                                                | selection = 
+                                                    Themes.Monoselection Nothing
+                                                }
+
                             in
                             updoot newCat
                         )
-                    , label = Input.labelHidden <|  "Multiphasic"
-                    , min = 0
-                    , max = 1
-                    , step = Just 0.01
-                    , value = category.transparency
-                    , thumb = Input.defaultThumb
+                    , icon = Input.defaultCheckbox
+                    , label = Input.labelHidden <|  "Hidden"
+                    , checked = 
+                        case category.selection of
+                            Themes.Polyselection _ -> True
+                            _ -> False
                     }
                 ]
-            ]
-        , row
-            [spacing 6 
-            , width fill
-            ]
-            [ makeLabel "Open By Default"
-            , Input.checkbox
-                []
-                { onChange = 
-                    (\val ->
-                        let
-                            newCat = 
-                                { category 
-                                | openness = 
-                                    if val then
-                                        Themes.Open
-                                    else
-                                       Themes.Closed
-                                }
-                        in
-                        updoot newCat
-                    )
-                , icon = Input.defaultCheckbox
-                , label = Input.labelHidden <|  "Hidden"
-                , checked = 
-                    if category.openness == Themes.Open then
-                        True
-                    else
-                        False
-                }
-            ]
-        , row
-            [spacing 6 
-            , width fill
-            ]
-            [ column 
-                []
-                [ makeLabel "Groups"
-                , appButton "Add Group" 
-                    ( 
-                        let
-                            newKey = Themes.stringToGroupKey "grp_changeme"
-                            newCat =
-                                { category
-                                | layerGroups = category.layerGroups ++
-                                    [ newKey
-                                    ]
-                                }
-                            newGrp = 
-                                { key = newKey
-                                , name = Nothing
-                                , openness = Themes.Closed
-                                , layers = []
-                                }
-                            newt = 
-                                { themes
-                                | layerCategories = before ++ [ newCat ] ++ after
-                                }
-            
-                        in
-                         Themes.updateGroup newt newGrp
-                         |> UpdateThemes
-
-                    )
-                    True
+            , row
+                [spacing 6 
+                , width fill
                 ]
-            , column
-                [ width fill
+                [ makeLabel "Hidden"
+                , Input.checkbox
+                    []
+                    { onChange = 
+                        (\val ->
+                            let
+                                newCat = 
+                                    { category | hidden = val }
+                            in
+                            updoot newCat
+                        )
+                    , icon = Input.defaultCheckbox
+                    , label = Input.labelHidden <|  "Hidden"
+                    , checked = 
+                        category.hidden
+                    }
                 ]
-                <| List.indexedMap
-                    ( \idxx -> \element ->
-                        column
+            , row
+                [spacing 6 
+                , width fill
+                ]
+                [ makeLabel "Multiphasic"
+                , Input.checkbox
+                    []
+                    { onChange = 
+                        (\val ->
+                            let
+                                newCat = 
+                                    { category | multiphasic = val }
+                            in
+                            updoot newCat
+                        )
+                    , icon = Input.defaultCheckbox
+                    , label = Input.labelHidden <|  "Multiphasic"
+                    , checked = 
+                        category.multiphasic
+                    }
+                ]
+            , row
+                [spacing 6 
+                , width fill
+                ]
+                [ makeLabel "Transparency"
+                , row
+                    [ width fill
+                    , spacing 5
+                    ]
+                    [ makeLabel <| ( String.fromInt ( floor ( category.transparency * 100 ) ) ) ++ "%"
+                    , Input.slider
                         [ width fill
-                        , spacing 10
+                        , Bg.color <| rgb 0.9 0.9 0.9
                         ]
-                        [ spacer
-                        , appButton
-                            "Add Group Before"
-                            (
+                        { onChange = 
+                            (\val ->
                                 let
-                                    be4 =
-                                        List.take idxx category.layerGroups
-                                    aft =
-                                        List.drop (idxx) category.layerGroups
-                                    newKey = Themes.stringToGroupKey <| "grp_changeme_" ++ ( String.fromInt <| List.length <| Dict.values themes.layerGroupRepo)
-                                    newCat =
-                                        { category
-                                        | layerGroups = be4 ++
-                                            [ newKey
-                                            ] ++ aft
-                                        }
-                                    newGrp = 
-                                        { key = newKey
-                                        , name = Nothing
-                                        , openness = Themes.Closed
-                                        , layers = []
-                                        }
-                                    
-
-                                    newThm = 
-                                        Themes.updateGroup
-                                            themes
-                                            newGrp
-                                    newt = 
-                                        { newThm
-                                        | layerCategories = before ++ [ newCat ] ++ after
-                                        }
+                                    newCat = 
+                                        { category | transparency = val }
                                 in
-                                UpdateThemes newt
-                                    
+                                updoot newCat
                             )
+                        , label = Input.labelHidden <|  "Multiphasic"
+                        , min = 0
+                        , max = 1
+                        , step = Just 0.01
+                        , value = category.transparency
+                        , thumb = Input.defaultThumb
+                        }
+                    ]
+                ]
+            , row
+                [spacing 6 
+                , width fill
+                ]
+                [ makeLabel "Open By Default"
+                , Input.checkbox
+                    []
+                    { onChange = 
+                        (\val ->
+                            let
+                                newCat = 
+                                    { category 
+                                    | openness = 
+                                        if val then
+                                            Themes.Open
+                                        else
+                                        Themes.Closed
+                                    }
+                            in
+                            updoot newCat
+                        )
+                    , icon = Input.defaultCheckbox
+                    , label = Input.labelHidden <|  "Hidden"
+                    , checked = 
+                        if category.openness == Themes.Open then
                             True
-                        , element
-                        , appButton
-                            "Add Group After"
-                            (
-                                let
-                                    be4 =
-                                        List.take (idxx+1) category.layerGroups
-                                    aft =
-                                        List.drop (idxx+1) category.layerGroups
-                                    newKey = Themes.stringToGroupKey <| "grp_changeme_" ++ ( String.fromInt <| List.length <| Dict.values themes.layerGroupRepo)
-                                    newCat =
-                                        { category
-                                        | layerGroups = be4 ++
-                                            [ newKey
-                                            ] ++ aft
-                                        }
-                                    newGrp = 
-                                        { key = newKey
-                                        , name = Nothing
-                                        , openness = Themes.Closed
-                                        , layers = []
-                                        }
-                                    
+                        else
+                            False
+                    }
+                ]
+            , row
+                [spacing 6 
+                , width fill
+                ]
+                [ column 
+                    []
+                    [ makeLabel "Groups"
+                    , appButton "Add Group" 
+                        ( 
+                            let
+                                newKey = Themes.stringToGroupKey "grp_changeme"
+                                newCat =
+                                    { category
+                                    | layerGroups = category.layerGroups ++
+                                        [ newKey
+                                        ]
+                                    }
+                                newGrp = 
+                                    { key = newKey
+                                    , name = Nothing
+                                    , openness = Themes.Closed
+                                    , layers = []
+                                    }
+                                newt = 
+                                    { themes
+                                    | layerCategories = before ++ [ newCat ] ++ after
+                                    }
+                
+                            in
+                            Themes.updateGroup newt newGrp
+                            |> UpdateThemes
 
-                                    newThm = 
-                                        Themes.updateGroup
-                                            themes
-                                            newGrp
-                                    newt = 
-                                        { newThm
-                                        | layerCategories = before ++ [ newCat ] ++ after
-                                        }
-                                in
-                                UpdateThemes newt
-                                    
-                            )
-                            True
-                        , spacer
-                        ]
-                    )
-                <| List.map 
-                    ( renderGroup themes category index
-                    )
-                    category.layerGroups
+                        )
+                        True
+                    ]
+                , column
+                    [ width fill
+                    ]
+                    <| List.indexedMap
+                        ( \idxx -> \element ->
+                            column
+                            [ width fill
+                            , spacing 10
+                            ]
+                            [ spacer
+                            , appButton
+                                "Add Group Before"
+                                (
+                                    let
+                                        be4 =
+                                            List.take idxx category.layerGroups
+                                        aft =
+                                            List.drop (idxx) category.layerGroups
+                                        newKey = Themes.stringToGroupKey <| "grp_changeme_" ++ ( String.fromInt <| List.length <| Dict.values themes.layerGroupRepo)
+                                        newCat =
+                                            { category
+                                            | layerGroups = be4 ++
+                                                [ newKey
+                                                ] ++ aft
+                                            }
+                                        newGrp = 
+                                            { key = newKey
+                                            , name = Nothing
+                                            , openness = Themes.Closed
+                                            , layers = []
+                                            }
+                                        
+
+                                        newThm = 
+                                            Themes.updateGroup
+                                                themes
+                                                newGrp
+                                        newt = 
+                                            { newThm
+                                            | layerCategories = before ++ [ newCat ] ++ after
+                                            }
+                                    in
+                                    UpdateThemes newt
+                                        
+                                )
+                                True
+                            , element
+                            , appButton
+                                "Add Group After"
+                                (
+                                    let
+                                        be4 =
+                                            List.take (idxx+1) category.layerGroups
+                                        aft =
+                                            List.drop (idxx+1) category.layerGroups
+                                        newKey = Themes.stringToGroupKey <| "grp_changeme_" ++ ( String.fromInt <| List.length <| Dict.values themes.layerGroupRepo)
+                                        newCat =
+                                            { category
+                                            | layerGroups = be4 ++
+                                                [ newKey
+                                                ] ++ aft
+                                            }
+                                        newGrp = 
+                                            { key = newKey
+                                            , name = Nothing
+                                            , openness = Themes.Closed
+                                            , layers = []
+                                            }
+                                        
+
+                                        newThm = 
+                                            Themes.updateGroup
+                                                themes
+                                                newGrp
+                                        newt = 
+                                            { newThm
+                                            | layerCategories = before ++ [ newCat ] ++ after
+                                            }
+                                    in
+                                    UpdateThemes newt
+                                        
+                                )
+                                True
+                            , spacer
+                            ]
+                        )
+                    <| List.map 
+                        ( renderGroup themes category index
+                        )
+                        category.layerGroups
+                ]
+                
             ]
-            
-        ]
 
 renderGroup : Themes.Model -> Themes.LayerCategory -> Int -> Themes.GroupKey -> Element Msg
 renderGroup themes category index group =
@@ -1230,17 +1382,18 @@ groupRenderer themes category index group =
                         , spacer
                         ]
                     )
-                <| List.map 
+                <| List.indexedMap 
                     ( renderLayer themes category index group
                     )
                     group.layers
             ]
         ]
 
-renderLayer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.LayerGroup -> Themes.LayerKey -> Element Msg
-renderLayer themes category index group layer  =
+renderLayer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.LayerGroup -> Int -> Themes.LayerKey -> Element Msg
+renderLayer themes category index group layerIndex layer  =
     let
         lyr = Themes.getLayerByKey themes.layerRepo layer
+
     in
     column
         [ spacing 5
@@ -1248,7 +1401,23 @@ renderLayer themes category index group layer  =
         , width fill
         , padding 5
         ]
-        [ text <| Themes.layerKeyToString layer
+        [ row
+            []
+            [ text <| Themes.layerKeyToString layer
+            , simpleAppButton
+                "Remove"
+                (
+                    let
+                        beforeLayers = List.take layerIndex group.layers
+                        afterLayers = List.drop (layerIndex + 1) group.layers
+                    in
+                    Themes.updateGroup themes
+                        { group
+                        | layers = beforeLayers ++ afterLayers
+                        }
+                    |> UpdateThemes
+                )
+            ]
         , case lyr of
             Just g ->
                 layerRenderer themes category index group g
@@ -1303,10 +1472,12 @@ layerRenderer themes category index group layer =
                 { onChange = 
                     (\text ->
                         let
+
+                            newKey = Themes.stringToLayerKey text 
                             newCat = 
                                 { layer 
                                 | key = 
-                                    Themes.stringToLayerKey text
+                                    newKey
                                 }
 
                             newGroup =
@@ -1316,7 +1487,7 @@ layerRenderer themes category index group layer =
                                     |> List.map
                                         (\l ->
                                             if l == layer.key then
-                                                Themes.stringToLayerKey text
+                                                newKey
                                             else
                                                 l
                                         )
@@ -1324,8 +1495,15 @@ layerRenderer themes category index group layer =
 
                             newThm thm =
                                 if isSelected then
-                                    Themes.toggleLayerSelection layer.key category thm
-                                    |> Themes.toggleLayerSelection (Themes.stringToLayerKey text) category
+                                    let
+                                        nc = Themes.toggleLayerSelectionOff layer.key category thm
+                                        nnc = Themes.toggleLayerSelectionOn (newKey) nc thm
+
+                                        newcats = Themes.replaceCategory nnc thm.layerCategories
+
+                                    in
+                                    { thm | layerCategories = newcats }
+                                    
                                 else
                                     thm
 
@@ -1432,7 +1610,57 @@ layerRenderer themes category index group layer =
             [ makeLabel "Identify"
             , identifyRenderer themes category index layer layer.identify
             ]
+        , row
+            [ spacing 6 
+            , width fill
+            ]
+            [ makeLabel "Legend"
+            , legendRenderer themes category index layer layer.legend
+            ]
         ]
+
+
+
+
+
+legendRenderer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.Layer -> Maybe Themes.Legend -> Element Msg
+legendRenderer themes category index layer legend =
+    let
+        updateLayerIdent newIdent =
+            { layer
+            | identify = Just newIdent
+            }
+            |> Themes.updateLayer themes
+            |> UpdateThemes
+    in
+    column
+        [ Border.width 1
+        , padding 3
+        , width fill
+        ]
+    <| case legend of
+        Nothing ->
+            [ appButton 
+                "Add" 
+                (   let
+                        newLayer =
+                            { layer
+                            | legend = Just []
+                            }
+                    in
+                    Themes.updateLayer themes newLayer
+                    |> UpdateThemes
+                )
+                True
+            ]
+        Just ident ->
+            [ text "todo"
+            ]
+
+
+
+
+
 
 identifyRenderer : Themes.Model -> Themes.LayerCategory -> Int -> Themes.Layer -> Maybe Themes.Identify -> Element Msg
 identifyRenderer themes category index layer identify =
@@ -1689,6 +1917,8 @@ identifyRenderer themes category index layer identify =
                 ]
             ]
 
+
+
 identifyFieldView : Themes.IdentifyField -> Element Themes.IdentifyField
 identifyFieldView field =
     row
@@ -1809,7 +2039,8 @@ layerConfigRenderer themes category index layer =
                 Themes.XYZLayer _ -> "XYZ"
                 Themes.WMTSLayer _ -> "WMTS"
                 Themes.WMSLayer _ -> "WMS"
-                Themes.EsriExportLayer _ -> "ESRI MapService"
+                Themes.EsriMapServiceLayer _ -> "ESRI MapService"
+                Themes.EsriFeatureServiceLayer _ -> "ESRI FeatureService"
                 Themes.MapboxVectorTile _ -> "MVT"
                 Themes.UnknownLayer -> "Unknown"
     in
@@ -1847,11 +2078,25 @@ layerConfigRenderer themes category index layer =
                                         , extent = emptyExtent
                                         }
                                 "ESRI MapService" -> 
-                                    Themes.EsriExportLayer
-                                    { endpoints = []
-                                    , extent = emptyExtent 
-                                    , layerDefs = Nothing
-                                    }
+                                    case layer.config of
+                                        Themes.EsriFeatureServiceLayer conf ->
+                                            Themes.EsriMapServiceLayer conf
+                                        _ ->
+                                            Themes.EsriMapServiceLayer
+                                            { endpoints = []
+                                            , extent = emptyExtent 
+                                            , layerDefs = Nothing
+                                            }
+                                "ESRI FeatureService" -> 
+                                    case layer.config of
+                                        Themes.EsriMapServiceLayer conf ->
+                                            Themes.EsriFeatureServiceLayer conf
+                                        _ ->
+                                            Themes.EsriFeatureServiceLayer
+                                            { endpoints = []
+                                            , extent = emptyExtent 
+                                            , layerDefs = Nothing
+                                            }
                                 "MVT" -> 
                                     Themes.MapboxVectorTile
                                         { endpoints = []
@@ -1872,6 +2117,7 @@ layerConfigRenderer themes category index layer =
                 , Input.option "WMTS" (text "WMTS")
                 , Input.option "WMS" (text "WMS")
                 , Input.option "ESRI MapService" (text "ESRI MapService")
+                , Input.option "ESRI FeatureService" (text "ESRI FeatureService")
                 , Input.option "MVT" (text "MVT")
                 , Input.option "Unknown" (text "Unknown")
                 ]
@@ -1880,18 +2126,28 @@ layerConfigRenderer themes category index layer =
             Themes.XYZLayer _ -> text <| "XYZ"
             Themes.WMTSLayer _ -> text <| "WMTS"
             Themes.WMSLayer _ -> text <| "WMS"
-            Themes.EsriExportLayer esri -> renderESRIMapService themes layer esri
+            Themes.EsriMapServiceLayer esri -> renderESRIMapService themes layer esri
+            Themes.EsriFeatureServiceLayer esri -> renderESRIFeatureService themes layer esri
             Themes.MapboxVectorTile mvt -> renderMVTConfig themes layer mvt
             Themes.UnknownLayer -> text <| "Unknown type or error parsing"
         ]
 
-renderESRIMapService : Themes.Model -> Themes.Layer -> Themes.EsriExportConfig -> Element Msg
+renderESRIFeatureService : Themes.Model -> Themes.Layer -> Themes.EsriConfig -> Element Msg
+renderESRIFeatureService themes layer config =
+    renderESRIConfig themes layer config (Themes.EsriFeatureServiceLayer)
+
+renderESRIMapService : Themes.Model -> Themes.Layer -> Themes.EsriConfig -> Element Msg
 renderESRIMapService themes layer config =
+    renderESRIConfig themes layer config (Themes.EsriMapServiceLayer)
+
+
+renderESRIConfig : Themes.Model -> Themes.Layer -> Themes.EsriConfig -> (Themes.EsriConfig -> Themes.LayerConfig) -> Element Msg
+renderESRIConfig themes layer config xform =
     let
         
         updootLay cfg =
             { layer
-            | config = Themes.EsriExportLayer cfg
+            | config = xform cfg
             }
         
         updootThm lay =
@@ -1991,12 +2247,12 @@ renderESRIMapService themes layer config =
                 , spacing 5
                 ]
                 <| List.intersperse spacer
-                <| List.indexedMap (renderEsriMapServiceEndpoint themes layer config) config.endpoints
+                <| List.indexedMap (renderEsriMapServiceEndpoint themes layer config xform) config.endpoints
             ]
         ]
 
-renderEsriMapServiceEndpoint : Themes.Model -> Themes.Layer -> Themes.EsriExportConfig -> Int -> Themes.Endpoint -> Element Msg
-renderEsriMapServiceEndpoint themes layer config index endpoint =
+renderEsriMapServiceEndpoint : Themes.Model -> Themes.Layer -> Themes.EsriConfig -> (Themes.EsriConfig -> Themes.LayerConfig) -> Int -> Themes.Endpoint -> Element Msg
+renderEsriMapServiceEndpoint themes layer config xform index endpoint =
     let
         epB4 = List.take index config.endpoints
         epA = List.drop (index + 1) config.endpoints
@@ -2008,7 +2264,7 @@ renderEsriMapServiceEndpoint themes layer config index endpoint =
         
         updootLay cfg =
             { layer
-            | config = Themes.EsriExportLayer cfg
+            | config = xform cfg
             }
         
         updootThm lay =

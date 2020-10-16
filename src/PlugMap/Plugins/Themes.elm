@@ -121,7 +121,8 @@ type LayerConfig
     = XYZLayer XYZConfig
     | WMTSLayer WMTSConfig
     | WMSLayer WMSConfig
-    | EsriExportLayer EsriExportConfig
+    | EsriMapServiceLayer EsriConfig
+    | EsriFeatureServiceLayer EsriConfig
     | MapboxVectorTile MVTConfig
     | UnknownLayer
 
@@ -306,7 +307,7 @@ type alias WMSConfig =
     }
 
 
-type alias EsriExportConfig =
+type alias EsriConfig =
     { endpoints : List Endpoint
     , extent : Extent   
     , layerDefs : Maybe String 
@@ -551,6 +552,101 @@ toggleLayerSelection key category model =
 
     else
         model
+
+
+
+
+toggleLayerSelectionOn : LayerKey -> LayerCategory -> Model -> LayerCategory
+toggleLayerSelectionOn key category model =
+        let
+            newSelection =
+                updateSelectionOn key category.selection
+
+            newCategory =
+                { category | selection = newSelection }
+
+            newCategories = 
+                replaceCategory newCategory model.layerCategories
+        in
+        newCategory
+
+
+updateSelectionOn : LayerKey -> Selection -> Selection
+updateSelectionOn layerKey selection =
+    if not ( isLayerSelected layerKey selection ) then
+        -- remove layer key
+        case selection of
+            Monoselection _ ->
+                Monoselection (Just layerKey)
+
+            Polyselection keys ->
+                Polyselection (layerKey :: keys)
+
+            EnforcedMonoselection key ->
+                -- cannot remove
+                EnforcedMonoselection layerKey
+
+            EnforcedPolyselection key [] ->
+                EnforcedPolyselection layerKey [ key ]
+
+            EnforcedPolyselection key (v) ->
+                EnforcedPolyselection layerKey v
+    else  
+        selection
+
+
+toggleLayerSelectionOff : LayerKey -> LayerCategory -> Model -> LayerCategory
+toggleLayerSelectionOff key category model =
+        let
+            newSelection =
+                updateSelectionOff key category.selection
+
+            newCategory =
+                { category | selection = newSelection }
+
+            newCategories = 
+                replaceCategory newCategory model.layerCategories
+        in
+        newCategory
+
+
+
+updateSelectionOff : LayerKey -> Selection -> Selection
+updateSelectionOff layerKey selection =
+    if isLayerSelected layerKey selection then
+        -- remove layer key
+        case selection of
+            Monoselection _ ->
+                Monoselection Nothing
+
+            Polyselection keys ->
+                let
+                    ok = keys
+                    nk = 
+                        keys
+                        |> List.filter (\key -> key /= layerKey)
+                        |> Polyselection
+
+                in
+                nk
+
+            EnforcedMonoselection key ->
+                -- cannot remove
+                EnforcedMonoselection key
+
+            EnforcedPolyselection key [] ->
+                EnforcedPolyselection key []
+
+            EnforcedPolyselection key (head :: tail) ->
+                if key == layerKey then
+                    EnforcedPolyselection head tail
+
+                else
+                    (head :: tail)
+                        |> List.filter (\k -> k /= layerKey)
+                        |> EnforcedPolyselection key 
+    else  
+        selection
 
 resetCategory : CategoryKey -> Model -> Model
 resetCategory key model =
@@ -1038,7 +1134,8 @@ configDecoder =
         [ xyzLayerDecoder
         , wmtsLayerDecoder
         , wmsLayerDecoder
-        , esriExportLayerDecoder
+        , esriMapServiceLayerDecoder
+        , esriFeatureServiceLayerDecoder
         , mapboxVectorTileLayerDecoder
         , D.succeed UnknownLayer
         ]
@@ -1123,17 +1220,28 @@ wmtsConfigDecoder =
         |> required "extent" extentDecoder
 
 
-esriExportLayerDecoder : Decoder LayerConfig
-esriExportLayerDecoder =
-    D.succeed EsriExportLayer
-        |> required "esriExport" esriExportConfigDecoder
+esriMapServiceLayerDecoder : Decoder LayerConfig
+esriMapServiceLayerDecoder =
+    D.oneOf
+    [ D.succeed EsriMapServiceLayer
+        |> required "esriExport" esriConfigDecoder
+    , D.succeed EsriMapServiceLayer
+        |> required "esriMapServivce" esriConfigDecoder
+    ]
 
+esriFeatureServiceLayerDecoder : Decoder LayerConfig
+esriFeatureServiceLayerDecoder =
+    D.succeed EsriFeatureServiceLayer
+        |> required "esriFeature" esriConfigDecoder
 
-esriExportConfigDecoder : Decoder EsriExportConfig
-esriExportConfigDecoder =
-    D.succeed EsriExportConfig
+defaultExtent =
+    [0,0,0,0]
+
+esriConfigDecoder : Decoder EsriConfig
+esriConfigDecoder =
+    D.succeed EsriConfig
         |> required "endpoints"(D.list endpointDecoder)
-        |> required "extent" extentDecoder  
+        |> optional "extent" extentDecoder defaultExtent
         |> optional "layerDefs" (D.maybe D.string) Nothing      
 
 
@@ -1291,8 +1399,11 @@ encodeLayerConfigDB config_ =
         WMSLayer config ->
             ( "wms", encodeWMSLayer config )
 
-        EsriExportLayer config ->
-            ( "esriExport", encodeEsriExportLayer config )
+        EsriMapServiceLayer config ->
+            ( "esriExport", encodeEsriMapServiceLayer config )
+
+        EsriFeatureServiceLayer config ->
+            ( "esriFeature", encodeEsriMapServiceLayer config )
 
         MapboxVectorTile config ->
             ( "mvt", encodeMapboxConfig config )
@@ -1300,9 +1411,31 @@ encodeLayerConfigDB config_ =
         UnknownLayer ->
             ( "unknown", E.object [] )
 
+
 encodeLegend : Legend -> E.Value
 encodeLegend legend =
-    E.object [ ( "todo", E.string "todo" ) ]
+    E.list legendEntryEncoder legend
+
+
+legendEntryEncoder : LegendEntry -> E.Value
+legendEntryEncoder legend =
+    E.object
+        [ ( "name", E.string legend.name )
+        , ( "color", colorEncoder legend.color )
+        , ( "fontColor", colorEncoder legend.fontColor )
+        ]
+
+colorEncoder : Color -> E.Value
+colorEncoder color =
+    color |> Color.toRgba
+    |> (\c ->
+            E.object
+                [ ("r", E.int (floor(c.red * 255 )))
+                , ("g", E.int (floor(c.green * 255 )))
+                , ("b", E.int (floor(c.blue * 255 )))
+                ]
+        )
+
 
 encodeLayerCategoryDB : LayerCategory -> E.Value
 encodeLayerCategoryDB category =
@@ -1453,8 +1586,11 @@ encodeLayerConfig config_ =
                 WMSLayer config ->
                     ( "wms", encodeWMSLayer config )
 
-                EsriExportLayer config ->
-                    ( "esriExport", encodeEsriExportLayer config )
+                EsriMapServiceLayer config ->
+                    ( "esriExport", encodeEsriMapServiceLayer config )
+
+                EsriFeatureServiceLayer config ->
+                    ( "esriFeature", encodeEsriMapServiceLayer config )
 
                 MapboxVectorTile config ->
                     ( "mvt", encodeMapboxConfig config )
@@ -1485,8 +1621,8 @@ encodeWMTSLayer config =
         ]
 
 
-encodeEsriExportLayer : EsriExportConfig -> E.Value
-encodeEsriExportLayer config =
+encodeEsriMapServiceLayer : EsriConfig -> E.Value
+encodeEsriMapServiceLayer config =
     E.object
         [ ( "endpoints", E.list encodeEndpoint config.endpoints )
         , ( "extent", encodeExtent config.extent )      
